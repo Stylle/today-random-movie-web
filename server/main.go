@@ -211,7 +211,7 @@ func main() {
 	defer a.db.Close()
 	go a.schedulerLoop()
 	server := &http.Server{
-		Addr:              ":" + env("PORT", "8080"),
+		Addr:              env("LISTEN_ADDR", ":"+env("PORT", "8080")),
 		Handler:           securityHeaders(a),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
