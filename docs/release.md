@@ -1,5 +1,12 @@
 # 维护者发布流程
 
+## 已发布版本
+
+- `v0.1.0`：已发布 `stylle/today-random-movie-web:v0.1.0`、`latest` 和 `8c76110`
+- 平台：`linux/amd64`、`linux/arm64`
+- 多架构清单摘要：`sha256:de31355c1373e0586f916344f11713eba2978b9831b5aca1b70eb2d54efd4735`
+- 构建记录：https://github.com/Stylle/today-random-movie-web/actions/runs/39919095005
+
 ## 发布前
 
 ```bash
