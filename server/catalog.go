@@ -21,7 +21,9 @@ type Filters struct {
 	Libraries      []string `json:"libraries"`
 	Genre          string   `json:"genre"`
 	Country        string   `json:"country"`
-	Year           string   `json:"year"`
+	Year           string   `json:"year,omitempty"` // 兼容 v0.3.0 及更早版本保存的单年份规则。
+	YearFrom       string   `json:"yearFrom"`
+	YearTo         string   `json:"yearTo"`
 	ExcludeWatched bool     `json:"excludeWatched"`
 }
 
@@ -209,6 +211,19 @@ func movieMatches(movie Movie, filters Filters) bool {
 	if filters.Year != "" && filters.Year != movie.Year {
 		return false
 	}
+	if filters.YearFrom != "" || filters.YearTo != "" {
+		movieYear, err := strconv.Atoi(movie.Year)
+		if err != nil {
+			return false
+		}
+		from, to := intValue(filters.YearFrom, 0), intValue(filters.YearTo, 0)
+		if from > 0 && to > 0 && from > to {
+			from, to = to, from
+		}
+		if (from > 0 && movieYear < from) || (to > 0 && movieYear > to) {
+			return false
+		}
+	}
 	if filters.Genre != "" && !containsFold(movie.Genres, filters.Genre) {
 		return false
 	}
@@ -336,7 +351,10 @@ func mapKeys(value map[string]bool) []string {
 
 func filtersFromQuery(r *http.Request) Filters {
 	q := r.URL.Query()
-	return Filters{Libraries: q["library"], Genre: q.Get("genre"), Country: q.Get("country"), Year: q.Get("year"), ExcludeWatched: truth(q.Get("excludeWatched"))}
+	return Filters{
+		Libraries: q["library"], Genre: q.Get("genre"), Country: q.Get("country"), Year: q.Get("year"),
+		YearFrom: q.Get("yearFrom"), YearTo: q.Get("yearTo"), ExcludeWatched: truth(q.Get("excludeWatched")),
+	}
 }
 
 func (a *App) listMovies(w http.ResponseWriter, r *http.Request) {
@@ -478,6 +496,10 @@ func servePlaceholder(w http.ResponseWriter, seed string) {
 func scanSchedule(row M) M {
 	filters := M{}
 	_ = json.Unmarshal([]byte(str(row["filters_json"])), &filters)
+	if year := str(filters["year"]); year != "" && str(filters["yearFrom"]) == "" && str(filters["yearTo"]) == "" {
+		filters["yearFrom"], filters["yearTo"] = year, year
+	}
+	delete(filters, "year")
 	return M{"id": row["id"], "name": row["name"], "enabled": num(row["enabled"]) != 0, "kind": row["kind"], "time": row["time_of_day"], "timezone": row["timezone"], "weekday": row["weekday"], "dayOfMonth": row["day_of_month"], "filters": filters, "lastRunAt": row["last_run_at"]}
 }
 

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	_ "time/tzdata"
 )
 
 var templateVar = regexp.MustCompile(`\{\{[a-zA-Z0-9_]+\}\}`)
@@ -173,6 +174,7 @@ func (a *App) schedulerLoop() {
 }
 
 func (a *App) checkSchedules() {
+	a.checkSyncSchedule(time.Now())
 	for _, row := range a.rows("SELECT * FROM schedules WHERE enabled=1 ORDER BY created_at") {
 		due, key := scheduleDue(row, time.Now())
 		if !due || key == str(row["last_run_key"]) {
@@ -185,6 +187,22 @@ func (a *App) checkSchedules() {
 			log.Printf("schedule %s: %v", row["id"], err)
 		}
 	}
+}
+
+func (a *App) checkSyncSchedule(now time.Time) {
+	s := a.settings()
+	if !truth(s["sync_schedule_enabled"]) {
+		return
+	}
+	row := M{
+		"kind": s["sync_schedule_kind"], "time_of_day": s["sync_schedule_time"],
+		"timezone": s["sync_schedule_timezone"], "weekday": s["sync_schedule_weekday"],
+	}
+	due, key := scheduleDue(row, now)
+	if !due || key == s["sync_schedule_last_key"] || !a.startSync() {
+		return
+	}
+	a.updateSettings(map[string]string{"sync_schedule_last_key": key, "sync_schedule_last_at": nowISO()})
 }
 
 func scheduleDue(row M, now time.Time) (bool, string) {

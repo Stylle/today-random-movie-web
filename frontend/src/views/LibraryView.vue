@@ -4,7 +4,7 @@ import { api } from '../api.js'
 import FilterPanel from '../components/FilterPanel.vue'
 
 const options = ref({ libraries: [], genres: [], years: [], countries: [] })
-const filters = ref({ libraries: [], genre: '', country: '', year: '', excludeWatched: false })
+const filters = ref({ libraries: [], genre: '', country: '', yearFrom: '', yearTo: '', excludeWatched: false })
 const query = ref('')
 const items = ref([])
 const total = ref(0)
@@ -17,7 +17,7 @@ let timer
 async function load(reset = false) {
   if (reset) page.value = 1
   busy.value = true
-  const params = new URLSearchParams({ page: String(page.value), pageSize: '30', q: query.value, year: filters.value.year, genre: filters.value.genre, country: filters.value.country, excludeWatched: String(filters.value.excludeWatched) })
+  const params = new URLSearchParams({ page: String(page.value), pageSize: '30', q: query.value, yearFrom: filters.value.yearFrom, yearTo: filters.value.yearTo, genre: filters.value.genre, country: filters.value.country, excludeWatched: String(filters.value.excludeWatched) })
   filters.value.libraries.forEach(value => params.append('library', value))
   try {
     const result = await api('/api/movies?' + params)
@@ -34,7 +34,7 @@ onMounted(async () => { try { options.value = await api('/api/movies/options'); 
 <template>
   <div>
     <section class="page-heading"><div><span class="eyebrow">YOUR LIBRARY</span><h1>影片库</h1><p>所有影片都来自最近一次飞牛同步。</p></div><label class="search-box">⌕<input v-model="query" placeholder="搜索片名…" /></label></section>
-    <FilterPanel v-model="filters" :options="options" compact />
+    <FilterPanel v-model="filters" :options="options" :exclude-watched-default="false" compact />
     <div class="result-line"><span>共 {{ total }} 部影片</span><span v-if="busy">正在载入…</span></div>
     <div class="movie-grid">
       <button class="movie-card" v-for="item in items" :key="item.id" @click="selected = item">

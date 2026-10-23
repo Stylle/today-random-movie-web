@@ -1,0 +1,12 @@
+{
+  "name": "今日想看",
+  "short_name": "今日想看",
+  "description": "从飞牛影视媒体库中挑选今天想看的电影",
+  "start_url": "/#/today",
+  "display": "standalone",
+  "background_color": "#f2f5f2",
+  "theme_color": "#4e9575",
+  "icons": [
+    { "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

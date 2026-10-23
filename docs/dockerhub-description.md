@@ -1,11 +1,11 @@
 # 今日想看
 
-飞牛影视媒体库随机选片器。登录后使用，支持媒体同步、随机选片、Webhook 和每日/每周/每月自动推送。
+飞牛影视媒体库随机选片器。登录后使用，支持定时媒体同步、年份范围筛选、随机选片、Webhook 和每日/每周/每月自动推送。
 
 ```yaml
 services:
   movie:
-    image: stylle/today-random-movie-web:v0.3.0
+    image: stylle/today-random-movie-web:v0.4.0
     container_name: today-random-movie
     restart: always
     environment:

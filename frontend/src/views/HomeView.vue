@@ -5,7 +5,7 @@ import { store } from '../store.js'
 import FilterPanel from '../components/FilterPanel.vue'
 
 const options = ref({ libraries: [], genres: [], years: [], countries: [] })
-const filters = ref({ libraries: [], genre: '', country: '', year: '', excludeWatched: true })
+const filters = ref({ libraries: [], genre: '', country: '', yearFrom: '', yearTo: '', excludeWatched: true })
 const movie = ref(null)
 const history = ref([])
 const cursor = ref(-1)

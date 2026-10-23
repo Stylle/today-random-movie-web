@@ -65,6 +65,16 @@ func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 		respond(w, a.syncSnapshot())
 	case p == "/api/admin/sync" && r.Method == http.MethodGet:
 		respond(w, a.syncSnapshot())
+	case p == "/api/admin/sync-schedule" && r.Method == http.MethodGet:
+		respond(w, a.syncSchedule())
+	case p == "/api/admin/sync-schedule" && r.Method == http.MethodPut:
+		fields := cleanSyncSchedule(readBody(r))
+		a.updateSettings(map[string]string{
+			"sync_schedule_enabled": boolString(truth(fields["enabled"])),
+			"sync_schedule_kind":    str(fields["kind"]), "sync_schedule_time": str(fields["time"]),
+			"sync_schedule_timezone": str(fields["timezone"]), "sync_schedule_weekday": str(fields["weekday"]),
+		})
+		respond(w, a.syncSchedule())
 	case p == "/api/admin/posters/purge" && r.Method == http.MethodPost:
 		entries, _ := os.ReadDir(filepath.Join(a.dataDir, "posters"))
 		removed := 0
@@ -148,6 +158,35 @@ func boolString(value bool) string {
 }
 
 var timePattern = regexp.MustCompile(`^(?:[01]\d|2[0-3]):[0-5]\d$`)
+
+func (a *App) syncSchedule() M {
+	s := a.settings()
+	return M{
+		"enabled": truth(s["sync_schedule_enabled"]), "kind": s["sync_schedule_kind"],
+		"time": s["sync_schedule_time"], "timezone": s["sync_schedule_timezone"],
+		"weekday": intValue(s["sync_schedule_weekday"], 1), "lastRunAt": s["sync_schedule_last_at"],
+	}
+}
+
+func cleanSyncSchedule(v M) M {
+	kind := strings.ToLower(str(v["kind"]))
+	if kind != "daily" && kind != "weekly" {
+		fail(400, "同步周期仅支持 daily/weekly")
+	}
+	timeOfDay := str(v["time"])
+	if !timePattern.MatchString(timeOfDay) {
+		fail(400, "时间格式必须是 HH:MM")
+	}
+	tz := fallback(strings.TrimSpace(str(v["timezone"])), env("TZ", "Asia/Shanghai"))
+	if _, err := time.LoadLocation(tz); err != nil {
+		fail(400, "无效的 IANA 时区")
+	}
+	weekday := int(num(v["weekday"]))
+	if weekday < 0 || weekday > 6 {
+		weekday = 1
+	}
+	return M{"enabled": truth(v["enabled"]), "kind": kind, "time": timeOfDay, "timezone": tz, "weekday": weekday}
+}
 
 func cleanSchedule(v M) M {
 	name := strings.TrimSpace(str(v["name"]))

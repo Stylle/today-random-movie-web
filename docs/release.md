@@ -7,6 +7,6 @@
 推送版本标签后，GitHub Actions 自动测试并发布 `linux/amd64`、`linux/arm64`：
 
 ```bash
-git tag v0.3.0
-git push origin v0.3.0
+git tag v0.4.0
+git push origin v0.4.0
 ```

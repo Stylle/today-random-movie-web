@@ -114,6 +114,9 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Cache-Control", "no-cache")
 	}
+	if filepath.Ext(path) == ".webmanifest" {
+		w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
+	}
 	http.ServeFile(w, r, path)
 }
 
@@ -150,7 +153,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const version = "0.3.0"
+const version = "0.4.0"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {

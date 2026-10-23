@@ -58,10 +58,31 @@ func TestScheduleDue(t *testing.T) {
 	}
 }
 
+func TestSyncScheduleAndLegacyYearRule(t *testing.T) {
+	fields := cleanSyncSchedule(M{"enabled": true, "kind": "weekly", "time": "03:15", "timezone": "Asia/Shanghai", "weekday": 5})
+	if !truth(fields["enabled"]) || fields["kind"] != "weekly" || num(fields["weekday"]) != 5 {
+		t.Fatalf("unexpected sync schedule: %#v", fields)
+	}
+	rule := scanSchedule(M{
+		"id": "old", "name": "旧规则", "enabled": 1, "kind": "daily", "time_of_day": "20:00",
+		"timezone": "Asia/Shanghai", "weekday": 1, "day_of_month": 1, "filters_json": `{"year":"2024"}`, "last_run_at": "",
+	})
+	filters, ok := rule["filters"].(M)
+	if !ok || filters["yearFrom"] != "2024" || filters["yearTo"] != "2024" || filters["year"] != nil {
+		t.Fatalf("legacy year rule was not migrated: %#v", rule["filters"])
+	}
+}
+
 func TestMovieFilters(t *testing.T) {
 	movie := Movie{LibraryID: "lib-1", Genres: []string{"剧情", "悬疑"}, Countries: []string{"中国香港"}, Year: "2024", Watched: false}
-	if !movieMatches(movie, Filters{Libraries: []string{"lib-1"}, Genre: "悬疑", Country: "华语", Year: "2024", ExcludeWatched: true}) {
+	if !movieMatches(movie, Filters{Libraries: []string{"lib-1"}, Genre: "悬疑", Country: "华语", YearFrom: "2020", YearTo: "2025", ExcludeWatched: true}) {
 		t.Fatal("expected matching movie")
+	}
+	if movieMatches(movie, Filters{YearFrom: "2025", YearTo: "2030"}) {
+		t.Fatal("movie outside year range must be excluded")
+	}
+	if !movieMatches(movie, Filters{YearFrom: "2025", YearTo: "2020"}) {
+		t.Fatal("reversed year range should be normalized")
 	}
 	movie.Watched = true
 	if movieMatches(movie, Filters{ExcludeWatched: true}) {
