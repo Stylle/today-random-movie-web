@@ -10,13 +10,16 @@ def check_compose(name: str, expect_build: bool) -> None:
     data = yaml.safe_load((ROOT / name).read_text(encoding="utf-8"))
     service = data["services"]["movie"]
     assert bool(service.get("build")) is expect_build
-    assert service["ports"][0].startswith("${BIND_ADDRESS:-127.0.0.1}")
-    assert "./data:/data" in service["volumes"]
+    assert service["container_name"] == "today-random-movie"
+    assert service["restart"] == "always"
+    assert service["ports"] == ["127.0.0.1:8080:8080"]
+    assert any(volume.endswith(":/data") for volume in service["volumes"])
     assert service["read_only"] is True
     assert "ALL" in service["cap_drop"]
     assert "no-new-privileges:true" in service["security_opt"]
-    assert "SETUP_TOKEN" in service["environment"]
-    assert "TRUSTED_PROXIES" in service["environment"]
+    environment = {item.split("=", 1)[0] for item in service["environment"]}
+    assert "SETUP_TOKEN" in environment
+    assert "TRUSTED_PROXIES" in environment
 
 
 def main() -> None:
