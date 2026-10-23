@@ -171,13 +171,20 @@ func (a *App) getSetting(key, fallback string) string {
 }
 func (a *App) settings() map[string]string {
 	defaults := map[string]string{
-		"webhook_url":       "",
-		"webhook_method":    "POST",
-		"webhook_body_type": "json",
-		"webhook_headers":   "",
-		"webhook_body_tpl":  "",
-		"last_sync_at":      "",
-		"last_sync_error":   "",
+		"webhook_url":            "",
+		"webhook_method":         "POST",
+		"webhook_body_type":      "json",
+		"webhook_headers":        "",
+		"webhook_body_tpl":       "",
+		"last_sync_at":           "",
+		"last_sync_error":        "",
+		"sync_schedule_enabled":  "0",
+		"sync_schedule_kind":     "daily",
+		"sync_schedule_time":     "03:00",
+		"sync_schedule_timezone": env("TZ", "Asia/Shanghai"),
+		"sync_schedule_weekday":  "1",
+		"sync_schedule_last_key": "",
+		"sync_schedule_last_at":  "",
 	}
 	for _, row := range a.rows("SELECT key,value FROM settings") {
 		defaults[str(row["key"])] = str(row["value"])

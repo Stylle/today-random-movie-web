@@ -8,6 +8,7 @@
 - 随机选片、筛选和影片库
 - Webhook
 - 每日、每周、每月自动推送
+- 每日或每周自动同步新影片与已观看状态
 - 运行记录
 
 ## Docker Compose
@@ -15,7 +16,7 @@
 ```yaml
 services:
   movie:
-    image: stylle/today-random-movie-web:v0.3.0
+    image: stylle/today-random-movie-web:v0.4.0
     container_name: today-random-movie
     restart: always
     environment:
@@ -36,7 +37,7 @@ docker compose pull
 docker compose up -d
 ```
 
-访问 `http://NAS-IP:8080`，登录后在“管理设置”中保存飞牛连接并同步。
+访问 `http://NAS-IP:8080`，登录后在“管理设置”中保存飞牛连接并同步。定时同步可在“连接与同步”页启用；年份筛选支持起止范围。
 
 ## 重置管理员
 

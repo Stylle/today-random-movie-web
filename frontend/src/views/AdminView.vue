@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { api, jsonBody } from '../api.js'
 import { store, loadConfig } from '../store.js'
 import FilterPanel from '../components/FilterPanel.vue'
@@ -16,13 +16,14 @@ const webhook = ref({ url: '', method: 'POST', bodyType: 'json', headers: '', bo
 const schedules = ref([])
 const options = ref({ libraries: [], genres: [], years: [], countries: [] })
 const sync = ref({ running: false })
+const syncSchedule = ref({ enabled: false, kind: 'daily', time: '03:00', timezone: 'Asia/Shanghai', weekday: 1, lastRunAt: '' })
 const history = ref({ random: [], webhooks: [] })
 const message = ref('')
 const bad = ref(false)
 const busy = ref('')
 let poll
 
-const freshSchedule = () => ({ name: '每日推荐', enabled: true, kind: 'daily', time: '20:00', timezone: 'Asia/Shanghai', weekday: 5, dayOfMonth: 1, filters: { libraries: [], genre: '', country: '', year: '', excludeWatched: true } })
+const freshSchedule = () => ({ name: '每日推荐', enabled: true, kind: 'daily', time: '20:00', timezone: 'Asia/Shanghai', weekday: 5, dayOfMonth: 1, filters: { libraries: [], genre: '', country: '', yearFrom: '', yearTo: '', excludeWatched: true } })
 const scheduleForm = ref(freshSchedule())
 const editing = ref('')
 const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
@@ -43,15 +44,16 @@ function flash(text, isBad = false) {
 }
 
 async function loadAll() {
-  const [s, w, rules, opts, job, runs] = await Promise.all([
+  const [s, w, rules, opts, job, syncRule, runs] = await Promise.all([
     api('/api/admin/settings'), api('/api/admin/webhook'), api('/api/admin/schedules'),
-    api('/api/movies/options'), api('/api/admin/sync'), api('/api/admin/history'),
+    api('/api/movies/options'), api('/api/admin/sync'), api('/api/admin/sync-schedule'), api('/api/admin/history'),
   ])
   settings.value = { ...s, fnPassword: '' }
   webhook.value = w
   schedules.value = rules.items
   options.value = opts
   sync.value = job
+  syncSchedule.value = syncRule
   history.value = runs
   if (job.running) startPoll()
 }
@@ -96,6 +98,9 @@ function startPoll() {
 }
 
 const saveWebhook = () => run('webhook', () => api('/api/admin/webhook', { method: 'PUT', body: jsonBody(webhook.value) }))
+const saveSyncSchedule = () => run('sync-schedule', async () => {
+  syncSchedule.value = await api('/api/admin/sync-schedule', { method: 'PUT', body: jsonBody(syncSchedule.value) })
+})
 const testWebhook = () => run('webhook-test', async () => { await api('/api/admin/webhook/test', { method: 'POST' }); flash('测试消息已发送') })
 function editRule(rule = null) {
   editing.value = rule?.id || ''
@@ -145,7 +150,10 @@ function ruleSummary(rule) {
   return `每天 ${time}`
 }
 
-onMounted(async () => { if (store.user) { try { await loadAll() } catch (e) { flash(e.message, true) } } })
+watch(() => store.user?.id, async userID => {
+  if (!userID || settings.value) return
+  try { await loadAll() } catch (e) { flash(e.message, true) }
+}, { immediate: true })
 onUnmounted(() => clearInterval(poll))
 </script>
 
@@ -174,6 +182,18 @@ onUnmounted(() => clearInterval(poll))
           <div class="progress" v-if="sync.running"><div :style="{ width: sync.total ? `${sync.done / sync.total * 100}%` : '8%' }"></div></div>
           <p class="sync-state" v-if="sync.stage">{{ sync.stage }}<template v-if="sync.total"> · {{ sync.done }} / {{ sync.total }}</template></p>
           <p class="inline-error" v-if="settings.lastSyncError">{{ settings.lastSyncError }}</p>
+        </div>
+        <div class="panel">
+          <div class="panel-title-row"><div><h3>定时同步</h3><small>自动执行完整同步，更新新增影片、简介和已观看状态。</small></div><span class="status-dot" :class="{ on: syncSchedule.enabled }">{{ syncSchedule.enabled ? '已启用' : '未启用' }}</span></div>
+          <div class="field-grid">
+            <label class="field"><span>周期</span><select v-model="syncSchedule.kind"><option value="daily">每日</option><option value="weekly">每周</option></select></label>
+            <label class="field"><span>同步时间</span><input v-model="syncSchedule.time" type="time" /></label>
+            <label v-if="syncSchedule.kind === 'weekly'" class="field"><span>星期</span><select v-model.number="syncSchedule.weekday"><option v-for="(day, index) in weekdays" :key="day" :value="index">{{ day }}</option></select></label>
+            <label class="field"><span>时区</span><input v-model="syncSchedule.timezone" placeholder="Asia/Shanghai" /></label>
+          </div>
+          <label class="check-row"><input v-model="syncSchedule.enabled" type="checkbox" /><span>启用定时同步</span></label>
+          <small v-if="syncSchedule.lastRunAt" class="schedule-last-run">上次自动触发：{{ new Date(syncSchedule.lastRunAt).toLocaleString() }}</small>
+          <div class="action-row"><button class="primary" :disabled="busy === 'sync-schedule'" @click="saveSyncSchedule">{{ busy === 'sync-schedule' ? '保存中…' : '保存同步规则' }}</button></div>
         </div>
       </template>
 
