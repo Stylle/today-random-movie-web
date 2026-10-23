@@ -60,7 +60,7 @@ func renderNotifyJSON(template string, context M) ([]byte, error) {
 
 func (a *App) webhookContext(event string, movie Movie) M {
 	s := a.settings()
-	base := strings.TrimSuffix(env("PUBLIC_BASE_URL", ""), "/")
+	base := strings.TrimSuffix(a.getSetting("public_base_url", env("PUBLIC_BASE_URL", "")), "/")
 	poster := ""
 	if base != "" && movie.ID != "" {
 		poster = base + "/api/posters/" + movie.ID

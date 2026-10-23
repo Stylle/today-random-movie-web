@@ -75,7 +75,7 @@ func subtleCompare(a, b []byte) bool {
 }
 
 func secureRequest(r *http.Request) bool {
-	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") || strings.HasPrefix(env("PUBLIC_BASE_URL", ""), "https://")
+	return r.TLS != nil || forwardedHTTPS(r)
 }
 
 func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time, remember bool) {
@@ -104,7 +104,14 @@ func sameOrigin(r *http.Request) bool {
 		return true
 	}
 	u, err := url.Parse(origin)
-	return err == nil && strings.EqualFold(u.Host, r.Host)
+	if err != nil {
+		return false
+	}
+	host := r.Host
+	if forwarded := forwardedHost(r); forwarded != "" {
+		host = forwarded
+	}
+	return strings.EqualFold(u.Host, host)
 }
 
 func (a *App) authRoute(w http.ResponseWriter, r *http.Request) {

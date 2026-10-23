@@ -48,7 +48,8 @@ async function loadAll() {
     api('/api/admin/settings'), api('/api/admin/webhook'), api('/api/admin/schedules'),
     api('/api/movies/options'), api('/api/admin/sync'), api('/api/admin/history'),
   ])
-  settings.value = { ...s, fnPassword: '' }
+  settings.value = { ...s, fnPassword: '', tmdbToken: '' }
+  if (!settings.value.publicBaseUrl && /^https?:$/.test(window.location.protocol)) settings.value.publicBaseUrl = window.location.origin
   webhook.value = w
   schedules.value = rules.items
   options.value = opts
@@ -71,6 +72,17 @@ const saveFn = () => run('fn', async () => {
 const testFn = () => run('test', async () => {
   const result = await api('/api/admin/fnos/test', { method: 'POST' })
   flash(`连接成功，读取到 ${result.libraries} 个电影媒体库`)
+})
+
+const saveTmdb = () => run('tmdb', async () => {
+  await api('/api/admin/tmdb', { method: 'PUT', body: jsonBody({ source: settings.value.metadataSource, language: settings.value.tmdbLanguage, token: settings.value.tmdbToken }) })
+  if (settings.value.tmdbToken) settings.value.tmdbHasToken = true
+  settings.value.tmdbToken = ''
+})
+
+const testTmdb = () => run('tmdb-test', async () => {
+  await api('/api/admin/tmdb/test', { method: 'POST' })
+  flash('TMDB 连接成功')
 })
 
 async function startSync() {
@@ -134,7 +146,7 @@ async function runRule(id) {
 
 async function refreshHistory() { history.value = await api('/api/admin/history') }
 async function purgePosters() {
-  if (!confirm('清空封面缓存？下次访问时会从飞牛重新拉取。')) return
+  if (!confirm('清空封面缓存？下次访问时会优先从 TMDB、失败时从飞牛重新拉取。')) return
   await run('purge', async () => {
     const result = await api('/api/admin/posters/purge', { method: 'POST' })
     flash(`已清理 ${result.removed} 个缓存文件`)
@@ -164,15 +176,24 @@ onUnmounted(() => clearInterval(poll))
         <div class="panel">
           <h3>飞牛连接</h3>
           <div class="field-grid">
-            <label class="field span-2"><span>飞牛影视地址</span><input v-model="settings.fnServer" placeholder="http://192.168.1.20:32587/v" /><small>默认只允许私网或回环地址。</small></label>
+            <label class="field span-2"><span>飞牛影视地址</span><input v-model="settings.fnServer" placeholder="http://192.168.1.20:32587/v 或飞牛内网穿透地址" /><small>支持局域网地址、HTTPS 域名和飞牛内网穿透地址。</small></label>
             <label class="field"><span>账号</span><input v-model="settings.fnUsername" autocomplete="off" /></label>
             <label class="field"><span>密码</span><input v-model="settings.fnPassword" type="password" :placeholder="settings.fnHasPassword ? '已保存；留空不修改' : '飞牛密码'" autocomplete="new-password" /></label>
           </div>
           <label class="check-row warning-check"><input v-model="settings.fnInsecureTls" type="checkbox" /><span>允许自签名 HTTPS 证书（仅可信内网 NAS）</span></label>
           <div class="action-row"><button class="primary" :disabled="busy" @click="saveFn">保存连接</button><button class="ghost" :disabled="busy" @click="testFn">测试连接</button></div>
         </div>
+        <div class="panel">
+          <div class="panel-title-row"><div><h3>影片元数据与封面</h3><small>飞牛负责媒体列表和播放链接；TMDB 可补充中文简介、评分、分类和海报。</small></div><span class="status-dot" :class="{ on: settings.tmdbHasToken }">{{ settings.tmdbHasToken ? 'TMDB 已配置' : '未配置' }}</span></div>
+          <div class="field-grid">
+            <label class="field"><span>元数据来源</span><select v-model="settings.metadataSource"><option value="auto">自动：TMDB 优先，飞牛回退</option><option value="tmdb">TMDB 优先</option><option value="fnos">仅使用飞牛</option></select></label>
+            <label class="field"><span>TMDB 语言</span><input v-model="settings.tmdbLanguage" placeholder="zh-CN" /><small>常用：zh-CN、zh-TW、en-US。</small></label>
+            <label class="field span-2"><span>TMDB API Read Access Token</span><input v-model="settings.tmdbToken" type="password" :placeholder="settings.tmdbHasToken ? '已加密保存；留空不修改' : '粘贴 TMDB API Read Access Token'" autocomplete="new-password" /><small>可选。未配置时自动使用飞牛元数据；Token 仅在服务端加密保存。</small></label>
+          </div>
+          <div class="action-row"><button class="primary" :disabled="busy" @click="saveTmdb">保存元数据设置</button><button class="ghost" :disabled="busy || !settings.tmdbHasToken" @click="testTmdb">测试 TMDB</button></div>
+        </div>
         <div class="panel sync-panel">
-          <div><h3>媒体库索引</h3><p>同步只拉取文本元数据；封面在访客真正看到时按需缓存。</p><small v-if="settings.lastSyncAt">上次同步：{{ new Date(settings.lastSyncAt).toLocaleString() }}</small></div>
+          <div><h3>媒体库索引</h3><p>先读取飞牛媒体与播放信息，再按设置匹配 TMDB；封面在访客真正看到时按需缓存。</p><small v-if="settings.lastSyncAt">上次同步：{{ new Date(settings.lastSyncAt).toLocaleString() }}</small></div>
           <div class="sync-action"><button class="primary" :disabled="sync.running" @click="startSync">{{ sync.running ? '同步进行中…' : '立即同步' }}</button><button class="ghost" @click="purgePosters">清理封面缓存</button></div>
           <div class="progress" v-if="sync.running"><div :style="{ width: sync.total ? `${sync.done / sync.total * 100}%` : '8%' }"></div></div>
           <p class="sync-state" v-if="sync.stage">{{ sync.stage }}<template v-if="sync.total"> · {{ sync.done }} / {{ sync.total }}</template></p>
@@ -220,11 +241,12 @@ onUnmounted(() => clearInterval(poll))
         <div class="section-title"><div><span class="eyebrow">PUBLIC ACCESS</span><h1>站点与安全</h1><p>公网部署建议保留默认的“公开浏览、登录后播放”策略。</p></div></div>
         <div class="panel">
           <label class="field"><span>站点名称</span><input v-model="settings.siteTitle" /></label>
+          <label class="field public-url-field"><span>公网访问地址</span><input v-model="settings.publicBaseUrl" placeholder="https://movie.example.com" /><small>已按当前访问地址自动填写，可修改；用于 Webhook 海报链接，不再需要 Compose 参数。</small></label>
           <div class="switch-list">
             <label class="switch-card" :class="{ on: settings.publicAccess }"><input v-model="settings.publicAccess" type="checkbox" /><div><b>允许访客浏览与随机</b><small>关闭后影片库、随机和封面都要求登录。</small></div></label>
             <label class="switch-card" :class="{ on: settings.publicPlay }"><input v-model="settings.publicPlay" type="checkbox" /><div><b>允许访客获取飞牛播放地址</b><small>会向访客返回内网飞牛 URL；公网场景通常应关闭。</small></div></label>
           </div>
-          <div class="security-callout"><b>反向代理检查清单</b><ul><li>使用 HTTPS，并将应用端口只绑定到 127.0.0.1。</li><li>仅把真实代理网段写入 TRUSTED_PROXIES。</li><li>同时备份 app.db 与 secret.key。</li></ul></div>
+          <div class="security-callout"><b>公网防护已内置</b><ul><li>使用 HTTPS；登录、CSRF、请求限流与安全响应头默认启用。</li><li>飞牛内网穿透或私网反向代理会自动识别，无需额外填写可信代理参数。</li><li>同时备份 app.db 与 secret.key；播放地址仍默认只对管理员开放。</li></ul></div>
           <button class="primary" :disabled="busy" @click="saveSite">保存站点设置</button>
         </div>
       </template>

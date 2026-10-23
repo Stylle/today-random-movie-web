@@ -78,6 +78,6 @@ onUnmounted(() => window.removeEventListener('hashchange', syncRoute))
 
     <div v-if="bootError" class="global-error">无法连接服务：{{ bootError }}</div>
     <main class="page-wrap"><component :is="component" v-bind="routeProps" /></main>
-    <footer>今日想看 · 私有媒体库随机选片器</footer>
+    <footer>今日想看 · 私有媒体库随机选片器 · 本产品使用 TMDB API，但未经 TMDB 认可或认证</footer>
   </div>
 </template>

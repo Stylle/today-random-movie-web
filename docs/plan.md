@@ -32,4 +32,12 @@
 - [x] GitHub 仓库创建、说明与源码上传
 - [x] Docker Hub 多架构镜像与部署说明
 
-`v0.1.0` 已由 GitHub Actions 完成真实镜像构建并发布至 Docker Hub，包含 `linux/amd64` 和 `linux/arm64`。本机预览使用 Windows 原生二进制运行，因为当前主机没有 Docker CLI/可用 WSL Docker Engine。
+## v0.2 改进
+
+- [x] 兼容飞牛 root/ACL 挂载目录，不再要求 Compose `user` 字段
+- [x] 自动识别私网反向代理与飞牛内网穿透
+- [x] 精简 Compose，仅保留首次初始化 Token 和数据目录两个部署项
+- [x] TMDB 可选元数据、海报优先与飞牛回退
+- [x] 手机端表单、操作区、安全区和竖版海报布局优化
+
+`v0.1.0` 已由 GitHub Actions 完成真实镜像构建并发布至 Docker Hub，包含 `linux/amd64` 和 `linux/arm64`。`v0.2.0` 将沿用同一多架构流水线。本机预览使用 Windows 原生二进制运行，因为当前主机没有 Docker CLI/可用 WSL Docker Engine。

@@ -133,6 +133,40 @@ func (a *App) runSync() {
 		finish(fmt.Errorf("飞牛返回了 0 部影片；为避免误删，现有索引未修改"))
 		return
 	}
+	settings := a.settings()
+	if settings["metadata_source"] != "fnos" && settings["tmdb_token"] != "" {
+		existing := map[string]Movie{}
+		for _, movie := range a.allMovies() {
+			existing[movie.ID] = movie
+		}
+		for index := range movies {
+			if previous, ok := existing[movies[index].ID]; ok {
+				movies[index].TMDBID = previous.TMDBID
+				movies[index].TMDBPosterPath = previous.TMDBPosterPath
+				if previous.TMDBID != "" {
+					movies[index].MetadataSource = "tmdb"
+					movies[index].Overview = previous.Overview
+					movies[index].Genres = previous.Genres
+					movies[index].Rating = previous.Rating
+					if movies[index].Year == "" {
+						movies[index].Year = previous.Year
+					}
+				}
+			}
+		}
+		token, decryptErr := openSealed(a.secret, settings["tmdb_token"])
+		if decryptErr == nil {
+			if tmdb, clientErr := NewTMDBClient(token, settings["tmdb_language"]); clientErr == nil {
+				a.setSync(func(state *syncState) {
+					state.Stage = "匹配 TMDB 元数据"
+					state.Done, state.Total = 0, len(movies)
+				})
+				_, _ = tmdb.Enrich(ctx, movies, func(done, total int) {
+					a.setSync(func(state *syncState) { state.Done, state.Total = done, total })
+				})
+			}
+		}
+	}
 	a.setSync(func(state *syncState) { state.Stage = "写入本地索引" })
 	tx, err := a.db.Begin()
 	if err != nil {
@@ -141,10 +175,10 @@ func (a *App) runSync() {
 	}
 	marker := nowISO()
 	for _, movie := range movies {
-		_, err = tx.Exec(`INSERT INTO movies(id,source_id,title,year,genres,countries,overview,cover_path,library_id,library,watched,duration,rating,updated_at)
-			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-			ON CONFLICT(id) DO UPDATE SET source_id=excluded.source_id,title=excluded.title,year=excluded.year,genres=excluded.genres,countries=excluded.countries,overview=excluded.overview,cover_path=excluded.cover_path,library_id=excluded.library_id,library=excluded.library,watched=excluded.watched,duration=excluded.duration,rating=excluded.rating,updated_at=excluded.updated_at`,
-			movie.ID, movie.SourceID, movie.Title, movie.Year, jsonString(movie.Genres), jsonString(movie.Countries), movie.Overview, movie.CoverPath, movie.LibraryID, movie.Library, boolInt(movie.Watched), movie.Duration, movie.Rating, marker)
+		_, err = tx.Exec(`INSERT INTO movies(id,source_id,title,year,genres,countries,overview,cover_path,tmdb_id,tmdb_poster_path,metadata_source,library_id,library,watched,duration,rating,updated_at)
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+			ON CONFLICT(id) DO UPDATE SET source_id=excluded.source_id,title=excluded.title,year=excluded.year,genres=excluded.genres,countries=excluded.countries,overview=excluded.overview,cover_path=excluded.cover_path,tmdb_id=excluded.tmdb_id,tmdb_poster_path=excluded.tmdb_poster_path,metadata_source=excluded.metadata_source,library_id=excluded.library_id,library=excluded.library,watched=excluded.watched,duration=excluded.duration,rating=excluded.rating,updated_at=excluded.updated_at`,
+			movie.ID, movie.SourceID, movie.Title, movie.Year, jsonString(movie.Genres), jsonString(movie.Countries), movie.Overview, movie.CoverPath, movie.TMDBID, movie.TMDBPosterPath, fallback(movie.MetadataSource, "fnos"), movie.LibraryID, movie.Library, boolInt(movie.Watched), movie.Duration, movie.Rating, marker)
 		if err != nil {
 			tx.Rollback()
 			finish(err)
@@ -174,6 +208,7 @@ func decodeMovie(row M) Movie {
 	return Movie{
 		ID: str(row["id"]), SourceID: str(row["source_id"]), Title: str(row["title"]), Year: str(row["year"]), Genres: genres,
 		Countries: countries, Overview: str(row["overview"]), CoverPath: str(row["cover_path"]), LibraryID: str(row["library_id"]),
+		TMDBID: str(row["tmdb_id"]), TMDBPosterPath: str(row["tmdb_poster_path"]), MetadataSource: fallback(str(row["metadata_source"]), "fnos"),
 		Library: str(row["library"]), Watched: num(row["watched"]) != 0, Duration: str(row["duration"]), Rating: str(row["rating"]),
 	}
 }
@@ -182,7 +217,7 @@ func (a *App) movieJSON(movie Movie) M {
 	return M{
 		"id": movie.ID, "title": movie.Title, "year": movie.Year, "genres": movie.Genres, "countries": movie.Countries,
 		"overview": movie.Overview, "libraryId": movie.LibraryID, "library": movie.Library, "watched": movie.Watched,
-		"duration": movie.Duration, "rating": movie.Rating, "posterUrl": "/api/posters/" + movie.ID,
+		"duration": movie.Duration, "rating": movie.Rating, "metadataSource": movie.MetadataSource, "posterUrl": "/api/posters/" + movie.ID,
 	}
 }
 
@@ -398,8 +433,8 @@ func (a *App) posterRoute(w http.ResponseWriter, r *http.Request) {
 	if id == "" || strings.ContainsAny(id, "/\\.") {
 		fail(404, "封面不存在")
 	}
-	row := a.one("SELECT cover_path,updated_at FROM movies WHERE id=?", id)
-	if row == nil || str(row["cover_path"]) == "" {
+	row := a.one("SELECT cover_path,tmdb_poster_path,updated_at FROM movies WHERE id=?", id)
+	if row == nil || (str(row["cover_path"]) == "" && str(row["tmdb_poster_path"]) == "") {
 		servePlaceholder(w, id)
 		return
 	}
@@ -407,7 +442,7 @@ func (a *App) posterRoute(w http.ResponseWriter, r *http.Request) {
 	if _, err := os.Stat(cachePath); err != nil {
 		a.posterMu.Lock()
 		if _, secondErr := os.Stat(cachePath); secondErr != nil {
-			err = a.fetchPoster(cachePath, str(row["cover_path"]))
+			err = a.fetchPoster(cachePath, str(row["tmdb_poster_path"]), str(row["cover_path"]))
 		}
 		a.posterMu.Unlock()
 		if err != nil {
@@ -431,14 +466,30 @@ func (a *App) posterRoute(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, id, info.ModTime(), file)
 }
 
-func (a *App) fetchPoster(target, reference string) error {
-	client, err := a.configuredClient()
-	if err != nil {
-		return err
-	}
+func (a *App) fetchPoster(target, tmdbPath, fnReference string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 	defer cancel()
-	resp, err := client.FetchCover(ctx, reference)
+	var resp *http.Response
+	var err error
+	if tmdbPath != "" {
+		resp, err = fetchTMDBPoster(ctx, tmdbPath)
+	}
+	if err != nil || resp == nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		if fnReference == "" {
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("TMDB 封面接口不可用")
+		}
+		client, clientErr := a.configuredClient()
+		if clientErr != nil {
+			return clientErr
+		}
+		resp, err = client.FetchCover(ctx, fnReference)
+	}
 	if err != nil {
 		return err
 	}
