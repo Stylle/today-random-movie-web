@@ -1,0 +1,12 @@
+.reference/
+.qa-data/
+**/.tools/
+.env
+data/
+frontend/node_modules/
+frontend/dist/
+server/today-random-movie
+server/today-random-movie.exe
+*.log
+.idea/
+.vscode/

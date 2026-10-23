@@ -1,0 +1,10 @@
+.git
+.github
+.reference
+.qa-data
+.tools
+data
+frontend/node_modules
+frontend/dist
+server/today-random-movie*
+*.log
