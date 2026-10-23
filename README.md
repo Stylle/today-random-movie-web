@@ -30,7 +30,7 @@
 
 ## Docker Compose 部署
 
-### 1. 准备目录和环境变量
+### 1. 准备 Compose 文件
 
 ```bash
 mkdir today-random-movie && cd today-random-movie
@@ -38,14 +38,17 @@ curl -O https://raw.githubusercontent.com/Stylle/today-random-movie-web/main/doc
 cp docker-compose.hub.yml docker-compose.yml
 ```
 
-创建 `.env`，至少填写一条高熵初始化令牌：
+直接编辑 `docker-compose.yml`，无需创建 `.env`。至少修改以下三项：
 
-```dotenv
-SETUP_TOKEN=请替换为至少32位随机字符串
-TZ=Asia/Shanghai
-PUBLIC_BASE_URL=https://movie.example.com
-TRUSTED_PROXIES=172.16.0.0/12
+```yaml
+environment:
+  - SETUP_TOKEN=请替换为至少32位随机字符串
+  - PUBLIC_BASE_URL=https://movie.example.com
+volumes:
+  - /vol2/1000/03_Docker_Data/today-random-movie/data:/data
 ```
+
+如果飞牛的数据卷目录不同，直接修改冒号左侧的宿主机路径。其他参数也都集中在同一个 Compose 文件中。
 
 ### 2. 启动
 
@@ -55,14 +58,14 @@ docker compose up -d
 docker compose logs -f movie
 ```
 
-默认仅监听宿主机 `127.0.0.1:8080`。打开页面后输入 `.env` 中的 `SETUP_TOKEN`，创建首个管理员，再依次完成：
+默认仅映射宿主机回环地址 `127.0.0.1:8080`。打开页面后输入 Compose 中的 `SETUP_TOKEN`，创建首个管理员，再依次完成：
 
 1. “管理设置 → 连接与同步”保存飞牛地址和账号。
 2. 测试连接后执行第一次同步。
 3. 在“Webhook”保存并测试推送目标。
 4. 在“自动推送”创建每日/每周/每月规则。
 
-若确实要直接暴露端口，可在 `.env` 设置 `BIND_ADDRESS=0.0.0.0`，但更推荐反向代理 HTTPS。
+公网使用时应通过反向代理提供 HTTPS。若需要从局域网直接访问，可将端口改为 `8080:8080`，同时使用主机防火墙限制来源。
 
 ## Caddy 反向代理示例
 

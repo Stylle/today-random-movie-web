@@ -15,15 +15,19 @@
 services:
   movie:
     image: stylle/today-random-movie-web:latest
-    restart: unless-stopped
+    container_name: today-random-movie
+    restart: always
     environment:
-      TZ: Asia/Shanghai
-      SETUP_TOKEN: replace-with-a-long-random-value
-      PUBLIC_BASE_URL: https://movie.example.com
+      - TZ=Asia/Shanghai
+      - SETUP_TOKEN=replace-with-a-long-random-value
+      - PUBLIC_BASE_URL=https://movie.example.com
+      - TRUSTED_PROXIES=172.16.0.0/12
+      - ALLOW_PUBLIC_FNOS=false
+      - ALLOW_PRIVATE_WEBHOOKS=false
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      - ./data:/data
+      - /vol2/1000/03_Docker_Data/today-random-movie/data:/data
 ```
 
 完整说明、反向代理、安全与备份文档见 GitHub：

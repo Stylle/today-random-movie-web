@@ -3,18 +3,19 @@ services:
     build:
       context: .
     image: today-random-movie:local
-    restart: unless-stopped
+    container_name: today-random-movie
+    restart: always
     environment:
-      TZ: ${TZ:-Asia/Shanghai}
-      SETUP_TOKEN: ${SETUP_TOKEN:?请在 .env 中设置长随机初始化令牌}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
-      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
-      ALLOW_PUBLIC_FNOS: ${ALLOW_PUBLIC_FNOS:-false}
-      ALLOW_PRIVATE_WEBHOOKS: ${ALLOW_PRIVATE_WEBHOOKS:-false}
-      SESSION_HOURS: ${SESSION_HOURS:-12}
-      REMEMBER_DAYS: ${REMEMBER_DAYS:-30}
+      - TZ=Asia/Shanghai
+      - SETUP_TOKEN=change-this-before-starting-at-least-32-characters
+      - PUBLIC_BASE_URL=http://127.0.0.1:8080
+      - TRUSTED_PROXIES=
+      - ALLOW_PUBLIC_FNOS=false
+      - ALLOW_PRIVATE_WEBHOOKS=false
+      - SESSION_HOURS=12
+      - REMEMBER_DAYS=30
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-8080}:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./data:/data
     read_only: true
