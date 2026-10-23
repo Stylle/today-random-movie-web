@@ -42,22 +42,19 @@ var countryNames = map[string]string{
 }
 
 type Movie struct {
-	ID             string   `json:"id"`
-	SourceID       string   `json:"-"`
-	Title          string   `json:"title"`
-	Year           string   `json:"year"`
-	Genres         []string `json:"genres"`
-	Countries      []string `json:"countries"`
-	Overview       string   `json:"overview"`
-	CoverPath      string   `json:"-"`
-	TMDBID         string   `json:"-"`
-	TMDBPosterPath string   `json:"-"`
-	MetadataSource string   `json:"metadataSource"`
-	LibraryID      string   `json:"libraryId"`
-	Library        string   `json:"library"`
-	Watched        bool     `json:"watched"`
-	Duration       string   `json:"duration"`
-	Rating         string   `json:"rating"`
+	ID        string   `json:"id"`
+	SourceID  string   `json:"-"`
+	Title     string   `json:"title"`
+	Year      string   `json:"year"`
+	Genres    []string `json:"genres"`
+	Countries []string `json:"countries"`
+	Overview  string   `json:"overview"`
+	CoverPath string   `json:"-"`
+	LibraryID string   `json:"libraryId"`
+	Library   string   `json:"library"`
+	Watched   bool     `json:"watched"`
+	Duration  string   `json:"duration"`
+	Rating    string   `json:"rating"`
 }
 
 type FnOSClient struct {

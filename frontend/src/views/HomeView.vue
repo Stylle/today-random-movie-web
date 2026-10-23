@@ -73,7 +73,7 @@ onMounted(async () => {
             <span class="pick-label">TODAY'S MOVIE</span>
             <h2>{{ movie.title }}</h2>
             <p class="movie-meta">{{ metadata }}</p>
-            <div class="tags"><span v-for="tag in movie.genres" :key="tag">{{ tag }}</span><span v-if="movie.rating" class="rating">★ {{ movie.rating }}</span><span v-if="movie.metadataSource === 'tmdb'" class="source-badge">TMDB</span></div>
+            <div class="tags"><span v-for="tag in movie.genres" :key="tag">{{ tag }}</span><span v-if="movie.rating" class="rating">★ {{ movie.rating }}</span></div>
             <p class="overview">{{ movie.overview || '飞牛暂未提供这部影片的简介。或许，未知正是今晚最好的开场。' }}</p>
             <div class="hero-actions">
               <button class="primary large" @click="play">▶ 开始播放</button>

@@ -30,58 +30,25 @@ type syncState struct {
 }
 
 type App struct {
-	db         *sql.DB
-	dataDir    string
-	webDir     string
-	secret     []byte
-	setupToken string
-	writeMu    sync.Mutex
-	rateMu     sync.Mutex
-	rates      map[string]*rateBucket
-	fnMu       sync.Mutex
-	fnClient   *FnOSClient
-	posterMu   sync.Mutex
-	syncMu     sync.Mutex
-	syncState  syncState
-	stop       chan struct{}
+	db        *sql.DB
+	dataDir   string
+	webDir    string
+	secret    []byte
+	writeMu   sync.Mutex
+	fnMu      sync.Mutex
+	fnClient  *FnOSClient
+	posterMu  sync.Mutex
+	syncMu    sync.Mutex
+	syncState syncState
+	stop      chan struct{}
 }
 
 func newApp(dataDir, webDir string) *App {
 	must(os.MkdirAll(filepath.Join(dataDir, "posters"), 0750))
-	a := &App{dataDir: dataDir, webDir: webDir, secret: loadSecret(dataDir), rates: map[string]*rateBucket{}, stop: make(chan struct{})}
+	a := &App{dataDir: dataDir, webDir: webDir, secret: loadSecret(dataDir), stop: make(chan struct{})}
 	a.db = openDB(filepath.Join(dataDir, "app.db"))
-	if a.count("SELECT COUNT(*) FROM users") == 0 && env("SETUP_TOKEN", "") == "" {
-		a.setupToken = randomHex(12)
-		log.Printf("首次初始化令牌（仅本次进程有效）：%s", a.setupToken)
-	}
+	must(a.ensureInitialAdmin())
 	return a
-}
-
-func (a *App) rate(key string, limit int, span time.Duration) bool {
-	a.rateMu.Lock()
-	if len(a.rates) > 5000 {
-		cut := time.Now().Add(-30 * time.Minute)
-		for existing, bucket := range a.rates {
-			bucket.mu.Lock()
-			stale := bucket.last.Before(cut)
-			bucket.mu.Unlock()
-			if stale {
-				delete(a.rates, existing)
-			}
-		}
-	}
-	bucket := a.rates[key]
-	if bucket == nil {
-		bucket = &rateBucket{limit: limit, span: span}
-		a.rates[key] = bucket
-	}
-	a.rateMu.Unlock()
-	return bucket.allow(time.Now())
-}
-func (a *App) clearRate(key string) {
-	a.rateMu.Lock()
-	delete(a.rates, key)
-	a.rateMu.Unlock()
 }
 
 func respond(w http.ResponseWriter, value any) {
@@ -157,29 +124,23 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		a.count("SELECT 1")
 		respond(w, M{"ok": true, "version": version})
 	case p == "/api/public/config" && r.Method == http.MethodGet:
-		s := a.settings()
-		respond(w, M{"siteTitle": s["site_title"], "publicAccess": truth(s["public_access"]), "publicPlay": truth(s["public_play"]), "setupRequired": a.count("SELECT COUNT(*) FROM users") == 0, "movieCount": a.count("SELECT COUNT(*) FROM movies"), "lastSyncAt": s["last_sync_at"]})
+		respond(w, M{"siteTitle": "今日想看", "movieCount": a.count("SELECT COUNT(*) FROM movies"), "lastSyncAt": a.getSetting("last_sync_at", "")})
 	case strings.HasPrefix(p, "/api/auth/"):
 		a.authRoute(w, r)
 	case p == "/api/movies/options" && r.Method == http.MethodGet:
-		a.requirePublic(r)
+		a.require(r)
 		a.movieOptions(w)
 	case p == "/api/movies" && r.Method == http.MethodGet:
-		a.requirePublic(r)
+		a.require(r)
 		a.listMovies(w, r)
 	case p == "/api/random" && r.Method == http.MethodPost:
-		a.requirePublic(r)
-		if !a.rate("random:"+a.clientIP(r), 30, time.Minute) {
-			fail(429, "随机请求过于频繁")
-		}
+		a.require(r)
 		a.randomMovieRoute(w, r)
 	case strings.HasPrefix(p, "/api/posters/") && r.Method == http.MethodGet:
-		a.requirePublic(r)
-		if !a.rate("poster:"+a.clientIP(r), 240, time.Minute) {
-			fail(429, "封面请求过于频繁")
-		}
+		a.require(r)
 		a.posterRoute(w, r)
 	case p == "/api/play" && r.Method == http.MethodGet:
+		a.require(r)
 		a.playRoute(w, r)
 	case strings.HasPrefix(p, "/api/admin/"):
 		a.require(r)
@@ -189,13 +150,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *App) requirePublic(r *http.Request) {
-	if !truth(a.getSetting("public_access", "1")) {
-		a.require(r)
-	}
-}
-
-const version = "0.2.0"
+const version = "0.3.0"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
@@ -209,6 +164,11 @@ func main() {
 	}
 	a := newApp(env("DATA_DIR", "../data"), env("WEB_DIR", "../frontend/dist"))
 	defer a.db.Close()
+	if len(os.Args) > 1 && os.Args[1] == "admin-sync" {
+		must(a.syncAdminFromEnv())
+		log.Printf("管理员账号已从 USER/PASSWORD 重置")
+		return
+	}
 	go a.schedulerLoop()
 	server := &http.Server{
 		Addr:              env("LISTEN_ADDR", ":"+env("PORT", "8080")),

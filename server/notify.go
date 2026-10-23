@@ -59,17 +59,11 @@ func renderNotifyJSON(template string, context M) ([]byte, error) {
 }
 
 func (a *App) webhookContext(event string, movie Movie) M {
-	s := a.settings()
-	base := strings.TrimSuffix(a.getSetting("public_base_url", env("PUBLIC_BASE_URL", "")), "/")
-	poster := ""
-	if base != "" && movie.ID != "" {
-		poster = base + "/api/posters/" + movie.ID
-	}
 	title := "🎬 今日想看"
 	if event == "test" {
 		title = "🔔 Webhook 测试"
 	}
-	text := title + "\n\n· 站点：" + s["site_title"] + "\n· 时间：" + time.Now().Format("2006-01-02 15:04:05")
+	text := title + "\n\n· 时间：" + time.Now().Format("2006-01-02 15:04:05")
 	if movie.Title != "" {
 		text += "\n· 影片：" + movie.Title
 		if movie.Year != "" {
@@ -84,13 +78,10 @@ func (a *App) webhookContext(event string, movie Movie) M {
 		if movie.Overview != "" {
 			text += "\n· 简介：" + truncate(movie.Overview, 240)
 		}
-		if poster != "" {
-			text += "\n· 封面：" + poster
-		}
 	}
-	fields := M{"movie_id": movie.ID, "movie": movie.Title, "year": movie.Year, "genres": strings.Join(movie.Genres, ", "), "rating": movie.Rating, "poster_url": poster}
+	fields := M{"movie_id": movie.ID, "movie": movie.Title, "year": movie.Year, "genres": strings.Join(movie.Genres, ", "), "rating": movie.Rating}
 	fieldsJSON, _ := json.Marshal(fields)
-	return M{"title": title, "text": text, "event": event, "time": time.Now().Format("2006-01-02 15:04:05"), "site": s["site_title"], "movie": movie.Title, "year": movie.Year, "genres": strings.Join(movie.Genres, ", "), "rating": movie.Rating, "overview": movie.Overview, "poster_url": poster, "fields": string(fieldsJSON)}
+	return M{"title": title, "text": text, "event": event, "time": time.Now().Format("2006-01-02 15:04:05"), "movie": movie.Title, "year": movie.Year, "genres": strings.Join(movie.Genres, ", "), "rating": movie.Rating, "overview": movie.Overview, "fields": string(fieldsJSON)}
 }
 
 func (a *App) sendWebhook(event string, movie Movie, scheduleID string) (bool, int, string) {

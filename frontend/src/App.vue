@@ -18,7 +18,7 @@ const routeProps = computed(() => ({ key: route.value }))
 
 function syncRoute() {
   const wanted = location.hash.replace(/^#\/?/, '') || 'today'
-  route.value = routes[wanted] ? wanted : 'today'
+  route.value = store.authChecked && !store.user ? 'login' : routes[wanted] ? wanted : 'today'
   navOpen.value = false
   menuOpen.value = false
 }
@@ -45,7 +45,7 @@ onMounted(async () => {
   applyTheme(theme.value)
   window.addEventListener('hashchange', syncRoute)
   try { await Promise.all([loadConfig(), loadSession()]) } catch (error) { bootError.value = error.message }
-  if (store.config.setupRequired) go('login')
+  if (!store.user) go('login')
 })
 onUnmounted(() => window.removeEventListener('hashchange', syncRoute))
 </script>
@@ -59,8 +59,8 @@ onUnmounted(() => window.removeEventListener('hashchange', syncRoute))
       </a>
       <button class="nav-toggle icon-btn" @click="navOpen = !navOpen" :aria-expanded="navOpen">{{ navOpen ? '×' : '☰' }}</button>
       <nav :class="{ open: navOpen }">
-        <a href="#/today" :class="{ active: route === 'today' }">今日想看</a>
-        <a href="#/library" :class="{ active: route === 'library' }">影片库</a>
+        <a v-if="store.user" href="#/today" :class="{ active: route === 'today' }">今日想看</a>
+        <a v-if="store.user" href="#/library" :class="{ active: route === 'library' }">影片库</a>
         <a v-if="store.user" href="#/admin" :class="{ active: route === 'admin' }">管理设置</a>
       </nav>
       <div class="top-actions">
@@ -78,6 +78,6 @@ onUnmounted(() => window.removeEventListener('hashchange', syncRoute))
 
     <div v-if="bootError" class="global-error">无法连接服务：{{ bootError }}</div>
     <main class="page-wrap"><component :is="component" v-bind="routeProps" /></main>
-    <footer>今日想看 · 私有媒体库随机选片器 · 本产品使用 TMDB API，但未经 TMDB 认可或认证</footer>
+    <footer>今日想看 · 飞牛媒体库随机选片器</footer>
   </div>
 </template>

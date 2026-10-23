@@ -7,21 +7,9 @@ services:
     container_name: today-random-movie
     restart: always
     environment:
-      # 【可省略】省略时默认 Asia/Shanghai。
-      - TZ=Asia/Shanghai
-      # 【首次部署必填】至少 32 位随机字符串；首个管理员创建成功后可删除。
-      - SETUP_TOKEN=change-this-before-starting-at-least-32-characters
+      - USER=admin
+      - PASSWORD=change-this-password
     ports:
-      # 【必填】局域网直连可改为 "8080:8080"。
-      - "127.0.0.1:8080:8080"
+      - "8080:8080"
     volumes:
-      # 【必填】不要删除，否则重建容器会丢失数据库、密钥和缓存。
       - ./data:/data
-    # 以下均为推荐安全约束，通常无需修改。
-    read_only: true
-    tmpfs:
-      - /tmp:size=32m,mode=1777
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true

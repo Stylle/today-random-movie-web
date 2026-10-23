@@ -1,201 +1,79 @@
-# 今日想看（Today Random Movie Web）
+# 今日想看
 
-一个面向飞牛影视 / FnTV 私有媒体库的 Web 随机选片器。它参考了本地版 [today-random-movie](https://github.com/Stylle/today-random-movie) 的功能流程，重建为适合 Docker 与公网反向代理部署的 Go + Vue 应用。
+飞牛影视媒体库随机选片器。所有页面登录后使用。
 
-![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
-![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-amd64%20%7C%20arm64-2496ED?logo=docker&logoColor=white)
+保留功能：
 
-## 主要功能
+- 飞牛连接、同步和封面缓存
+- 随机选片、筛选和影片库
+- Webhook
+- 每日、每周、每月自动推送
+- 运行记录
 
-- 飞牛影视登录、媒体库与影片索引同步；兼容常见 `/v/api/v1` 接口和字段差异。
-- 媒体库、类型、地区、年份、观看状态筛选。
-- 当前会话上一部回看；服务端最近 30 次去重，影片池耗尽后自动放宽。
-- 图床项目同系的低饱和绿色 UI、明暗主题与手机端布局。
-- 服务端封面代理：按需拉取、15 MiB 上限、原子落盘、ETag 与浏览器缓存。
-- 可选 TMDB 增强：按片名和年份匹配中文简介、分类、评分与海报；失败自动回退飞牛。
-- 管理员登录、HttpOnly Cookie、CSRF、登录/随机/封面限流与安全响应头。
-- 通用 Webhook：GET/POST/PUT、自定义请求头、JSON/Text 模板和测试发送。
-- 内置“类 cron”调度：每日、每周、每月规则，各自拥有时区、时间和选片筛选条件。
-- 单镜像、SQLite、健康检查、只读根文件系统、去 Linux capabilities 与禁止提权。
-
-## 为什么封面传输不再直接走浏览器
-
-本地版可以直接访问 NAS 地址，但公网 HTTPS 页面直接加载内网 HTTP 图片会遇到混合内容、CORS、地址泄露和客户端无法路由等问题。本项目让后端持有飞牛会话并代理封面：
-
-```text
-浏览器 ── /api/posters/{id} ──> 应用缓存 ──未命中──> TMDB CDN ──失败回退──> 飞牛 /sys/img
-```
-
-浏览器只看到本站 URL；重复请求由本地缓存、ETag、浏览器或 CDN 消化。详细设计见 [docs/architecture.md](docs/architecture.md)。
-
-## Docker Compose 部署
-
-### 1. 准备 Compose 文件
-
-```bash
-mkdir today-random-movie && cd today-random-movie
-curl -O https://raw.githubusercontent.com/Stylle/today-random-movie-web/main/docker-compose.hub.yml
-cp docker-compose.hub.yml docker-compose.yml
-```
-
-直接编辑 `docker-compose.yml`，无需创建 `.env`。只需修改初始化令牌和数据目录：
+## Docker Compose
 
 ```yaml
-environment:
-  - SETUP_TOKEN=请替换为至少32位随机字符串
-volumes:
-  - /vol2/1000/03_Docker_Data/today-random-movie/data:/data
+services:
+  movie:
+    image: stylle/today-random-movie-web:v0.3.0
+    container_name: today-random-movie
+    restart: always
+    environment:
+      - USER=admin
+      - PASSWORD=change-this-password
+    ports:
+      - "8080:8080"
+    volumes:
+      - /vol2/1000/03_Docker_Data/today-random-movie/data:/data
 ```
 
-如果飞牛的数据卷目录不同，直接修改冒号左侧的宿主机路径。其他参数也都集中在同一个 Compose 文件中。
+首次启动时，`USER` 和 `PASSWORD` 创建管理员。之后修改环境变量不会覆盖已有账号。
 
-| 参数 | 是否必须 | 说明 |
-|---|---|---|
-| `SETUP_TOKEN` | 首次部署必填 | 至少 32 位随机字符串；首个管理员创建后可删除 |
-| `/data` 数据卷 | 必填 | 保存数据库、加密密钥和海报缓存，必须备份 |
-| `TZ` | 可省略 | 默认 `Asia/Shanghai` |
-
-公网地址、飞牛穿透、可信代理、会话时长和网络目标均无需 Compose 参数。应用会识别私网反代，公网地址在后台按当前浏览器地址自动填写并可修改。
-
-### 2. 启动
-
-```bash
-docker compose pull
-docker compose up -d
-docker compose logs -f movie
-```
-
-默认仅映射宿主机回环地址 `127.0.0.1:8080`。打开页面后输入 Compose 中的 `SETUP_TOKEN`，创建首个管理员，再依次完成：
-
-1. “管理设置 → 连接与同步”保存局域网地址或飞牛内网穿透地址和账号。
-2. 可选填写 TMDB API Read Access Token，然后测试连接并执行第一次同步。
-3. 在“Webhook”保存并测试推送目标。
-4. 在“自动推送”创建每日/每周/每月规则。
-
-公网使用时应通过反向代理提供 HTTPS。若需要从局域网直接访问，可将端口改为 `8080:8080`，同时使用主机防火墙限制来源。
-
-## Caddy 反向代理示例
-
-```caddyfile
-movie.example.com {
-    reverse_proxy 127.0.0.1:8080
-    encode zstd gzip
-}
-```
-
-飞牛内网穿透和同机/私网反向代理会自动识别 `X-Forwarded-Host`、`X-Forwarded-Proto` 与真实客户端 IP；来自公网直连的伪造转发头不会被信任。
-
-## 飞牛连接说明
-
-- 地址可填 `http://192.168.1.20:32587/v` 或飞牛内网穿透 HTTPS 地址；应用会定位 `/v/api/v1`。
-- 管理员可连接公网或私网飞牛地址；链路本地、组播和未指定地址仍会被拒绝。
-- 自签名 HTTPS 可在管理页单独启用；只应对可信 NAS 使用。
-- 凭据使用 `/data/secret.key` 做 AES-256-GCM 加密后写入 SQLite，密钥和数据库必须一起备份。
-- “允许访客获取播放地址”默认关闭，因为返回值通常是访客不可达的内网 URL。
-
-## TMDB 元数据（可选）
-
-飞牛始终负责媒体列表、观看状态和播放跳转。后台配置 TMDB API Read Access Token 后，同步会按“片名 + 年份”匹配 TMDB，补充中文简介、类型、评分与海报；匹配失败或 TMDB 不可用时自动保留飞牛数据。海报仍经过本站代理和缓存，浏览器不会访问飞牛内网地址。
-
-Token 在 `/data` 中加密保存，不需要写入 Compose。申请入口与 API 说明见 [TMDB Developer](https://developer.themoviedb.org/)。This product uses the TMDB API but is not endorsed or certified by TMDB.
-
-## Webhook 模板
-
-留空正文模板时会发送包含 `title`、`text`、`event`、`time`、`site`、影片字段的 JSON。自定义模板可使用：
-
-```json
-{
-  "title": "{{title}}",
-  "text": "{{text}}",
-  "movie": "{{movie}}",
-  "poster": "{{poster_url}}"
-}
-```
-
-可用变量：`title`、`text`、`event`、`time`、`site`、`movie`、`year`、`genres`、`rating`、`overview`、`poster_url`、`fields`。`fields` 在 JSON 模板中可不加引号以嵌入对象。
-
-计划使用每条规则自己的 IANA 时区和 `HH:MM`。调度器会在对应周期先写入唯一执行键，再执行一次推送，容器重启或同一分钟多次检查都不会重复发送。
-
-## 更新与回滚
+启动：
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-发布同时提供 `latest`、版本号和 Git 短哈希标签。生产环境建议锁定版本号：
+访问 `http://NAS-IP:8080`，登录后在“管理设置”中保存飞牛连接并同步。
 
-```yaml
-image: stylle/today-random-movie-web:v0.2.0
+## 重置管理员
+
+```bash
+docker exec -e USER=newadmin -e PASSWORD=new-password today-random-movie /app/today-random-movie admin-sync
 ```
 
-回滚只需改回旧标签并重新 `docker compose up -d`。升级前先备份 `data/`。
+执行后旧会话全部退出，新账号立即生效。
 
-## 备份
+## 数据
 
-唯一需要持久化的是 `./data:/data`：
+`/data` 包含：
 
-- `app.db`：配置、会话、影片索引、规则和历史。
-- `secret.key`：飞牛凭据加密密钥。
-- `posters/`：可删除并自动重建的封面缓存。
+- `app.db`：账号、配置、影片索引、推送规则和记录
+- `secret.key`：飞牛账号密码加密密钥
+- `posters/`：封面缓存
 
-数据库和 `secret.key` 必须作为同一个备份集。不要把它们提交到 Git。
+备份整个 `/data` 即可。飞牛账号密码使用 AES-256-GCM 加密保存。
+
+## 更新
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+支持 `linux/amd64` 和 `linux/arm64`。
 
 ## 本地开发
-
-要求 Node.js 24+ 与 Go 1.26+。
 
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run build
+
+cd ../server
+go test ./...
 ```
-
-另一个终端：
-
-```bash
-cd server
-go run .
-```
-
-生产构建与测试：
-
-```bash
-cd frontend && npm ci && npm run build
-cd ../server && go test ./...
-```
-
-## 主要 API
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/api/health` | 健康检查 |
-| `GET` | `/api/public/config` | 公开站点信息 |
-| `GET` | `/api/movies/options` | 筛选选项 |
-| `GET` | `/api/movies` | 分页影片库 |
-| `POST` | `/api/random` | 按筛选条件随机 |
-| `GET` | `/api/posters/{id}` | 封面代理/缓存 |
-| `POST` | `/api/auth/login` | 管理员登录 |
-| `POST` | `/api/admin/sync` | 启动媒体库同步 |
-| `PUT` | `/api/admin/webhook` | Webhook 配置 |
-| `POST` | `/api/admin/schedules` | 新建自动推送规则 |
-
-## 安全注意事项
-
-上线前请阅读 [SECURITY.md](SECURITY.md)。公网部署的最小要求是 HTTPS、长随机初始化令牌、关闭公开播放，以及不要公开 `/data`。私网代理会自动识别；只有代理从公网地址直连容器时才需要手工设置 `TRUSTED_PROXIES`。
-
-## 项目结构
-
-```text
-frontend/              Vue 3 UI
-server/                Go API、飞牛适配器、调度与 SQLite
-docs/architecture.md   架构与安全边界
-docker-compose.yml     本地构建部署
-docker-compose.hub.yml Docker Hub 镜像部署
-.github/workflows/     测试与多架构发布
-```
-
-## License
 
 [MIT](LICENSE)

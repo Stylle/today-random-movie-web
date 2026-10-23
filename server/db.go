@@ -109,29 +109,9 @@ func openDB(path string) *sql.DB {
 	}
 	_, err = db.Exec(schema)
 	must(err)
-	ensureColumn(db, "movies", "tmdb_id", "TEXT NOT NULL DEFAULT ''")
-	ensureColumn(db, "movies", "tmdb_poster_path", "TEXT NOT NULL DEFAULT ''")
-	ensureColumn(db, "movies", "metadata_source", "TEXT NOT NULL DEFAULT 'fnos'")
-	return db
-}
-
-func ensureColumn(db *sql.DB, table, column, definition string) {
-	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	_, err = db.Exec("DELETE FROM settings WHERE key IN ('site_title','public_access','public_play','public_base_url','metadata_source','tmdb_token','tmdb_language')")
 	must(err)
-	found := false
-	for rows.Next() {
-		var cid int
-		var name, dataType string
-		var notNull, primaryKey int
-		var defaultValue any
-		must(rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &primaryKey))
-		found = found || name == column
-	}
-	must(rows.Close())
-	if !found {
-		_, err = db.Exec("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition)
-		must(err)
-	}
+	return db
 }
 
 func scanRows(rows *sql.Rows) []M {
@@ -191,9 +171,6 @@ func (a *App) getSetting(key, fallback string) string {
 }
 func (a *App) settings() map[string]string {
 	defaults := map[string]string{
-		"site_title":        "今日想看",
-		"public_access":     "1",
-		"public_play":       "0",
 		"webhook_url":       "",
 		"webhook_method":    "POST",
 		"webhook_body_type": "json",
@@ -201,10 +178,6 @@ func (a *App) settings() map[string]string {
 		"webhook_body_tpl":  "",
 		"last_sync_at":      "",
 		"last_sync_error":   "",
-		"public_base_url":   "",
-		"metadata_source":   "auto",
-		"tmdb_token":        "",
-		"tmdb_language":     "zh-CN",
 	}
 	for _, row := range a.rows("SELECT key,value FROM settings") {
 		defaults[str(row["key"])] = str(row["value"])
