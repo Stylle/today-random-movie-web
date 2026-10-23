@@ -29,7 +29,7 @@
 - [x] 后端单元/集成测试、前端构建
 - [x] 容器与 Compose 静态检查（当前主机无 Docker Engine，未执行真实镜像构建）
 - [x] 安全说明、升级/备份/反代文档
-- [ ] GitHub 仓库创建与源码上传（本地 Git 和 CI 已完成）
+- [x] GitHub 仓库创建、说明与源码上传
 - [ ] Docker Hub 多架构镜像与部署说明
 
-当前发布阻塞：本机 GitHub CLI 凭据失效，Docker CLI/可用 WSL Docker Engine 不存在。连接 GitHub 并提供 Docker 构建环境后继续发布。
+当前发布阻塞：本机没有 Docker CLI/可用 WSL Docker Engine，新 GitHub 仓库也尚未配置 `DOCKERHUB_USERNAME` 与 `DOCKERHUB_TOKEN`。提供 Docker 构建环境或配置仓库 Actions secrets 后即可发布多架构镜像。
