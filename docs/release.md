@@ -2,7 +2,9 @@
 
 ## 已发布版本
 
-- `v0.2.0`：待本次发布完成后记录镜像摘要与构建链接
+- `v0.2.0`：已发布 `stylle/today-random-movie-web:v0.2.0`、`latest` 和 `1ab60bb`
+- v0.2.0 平台镜像：`linux/amd64`（`sha256:ff15ece85b31...`）、`linux/arm64`（`sha256:48910d5bc2ed...`）
+- v0.2.0 构建记录：https://github.com/Stylle/today-random-movie-web/actions/runs/39932267475
 - `v0.1.0`：已发布 `stylle/today-random-movie-web:v0.1.0`、`latest` 和 `8c76110`
 - 平台：`linux/amd64`、`linux/arm64`
 - 多架构清单摘要：`sha256:de31355c1373e0586f916344f11713eba2978b9831b5aca1b70eb2d54efd4735`
