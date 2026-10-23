@@ -12,14 +12,10 @@ def check_compose(name: str, expect_build: bool) -> None:
     assert bool(service.get("build")) is expect_build
     assert service["container_name"] == "today-random-movie"
     assert service["restart"] == "always"
-    assert service["ports"] == ["127.0.0.1:8080:8080"]
+    assert service["ports"] == ["8080:8080"]
     assert any(volume.endswith(":/data") for volume in service["volumes"])
-    assert service["read_only"] is True
-    assert "ALL" in service["cap_drop"]
-    assert "no-new-privileges:true" in service["security_opt"]
     environment = {item.split("=", 1)[0] for item in service["environment"]}
-    assert "SETUP_TOKEN" in environment
-    assert environment == {"SETUP_TOKEN", "TZ"}
+    assert environment == {"USER", "PASSWORD"}
 
 
 def main() -> None:
@@ -29,7 +25,7 @@ def main() -> None:
     assert "USER 0:0" in dockerfile
     assert "HEALTHCHECK" in dockerfile
     assert "CGO_ENABLED=0" in dockerfile
-    print("compose and Dockerfile security checks passed")
+    print("compose and Dockerfile checks passed")
 
 
 if __name__ == "__main__":

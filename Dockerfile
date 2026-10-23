@@ -17,16 +17,10 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
 
 FROM alpine:3.23
 RUN apk add --no-cache ca-certificates tzdata \
-    && addgroup -S app -g 10001 \
-    && adduser -S app -G app -u 10001 \
-    && mkdir -p /app/web /data \
-    && chown -R app:app /app /data
+    && mkdir -p /app/web /data
 WORKDIR /app
 COPY --from=backend /out/today-random-movie /app/today-random-movie
 COPY --from=frontend /src/frontend/dist /app/web
-# NAS bind mounts are commonly root-owned and cannot be chowned by Compose.
-# The runtime remains read-only, capability-free and no-new-privileges; root is
-# used only so the application can write its explicitly mounted /data volume.
 USER 0:0
 ENV DATA_DIR=/data WEB_DIR=/app/web PORT=8080 LISTEN_ADDR=:8080 TZ=Asia/Shanghai
 EXPOSE 8080
