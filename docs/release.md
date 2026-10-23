@@ -1,5 +1,6 @@
 # 发布
 
+- `v0.4.0`：Docker Hub `v0.4.0`、`latest`、`16861e1`（amd64/arm64）
 - `v0.3.0`：Docker Hub `v0.3.0`、`latest`、`f3fe96b`（amd64/arm64）
 - `v0.2.0`：Docker Hub `v0.2.0`、`latest`、`1ab60bb`
 - `v0.1.0`：Docker Hub `v0.1.0`、`8c76110`
