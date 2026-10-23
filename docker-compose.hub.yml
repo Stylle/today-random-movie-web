@@ -1,6 +1,6 @@
 services:
   movie:
-    # 【无需修改】Docker Hub 镜像；需要固定版本时把 latest 改成 v0.1.0。
+    # 【无需修改】Docker Hub 镜像；生产环境也可固定为 v0.2.0。
     image: stylle/today-random-movie-web:latest
     container_name: today-random-movie
     restart: always
@@ -9,18 +9,6 @@ services:
       - TZ=Asia/Shanghai
       # 【首次部署必填】至少 32 位随机字符串。首个管理员创建成功后可删除此行。
       - SETUP_TOKEN=change-this-before-starting-at-least-32-characters
-      # 【公网部署必填】站点的 HTTPS 访问地址，用于安全 Cookie 和 Webhook 中的绝对链接；仅本地使用可删除。
-      - PUBLIC_BASE_URL=https://movie.example.com
-      # 【使用反向代理时填写】只写实际代理来源网段；不用代理可删除，禁止填写 0.0.0.0/0。
-      - TRUSTED_PROXIES=172.16.0.0/12
-      # 【可省略，默认 false】飞牛地址是公网 IP/域名时才改 true。
-      - ALLOW_PUBLIC_FNOS=false
-      # 【可省略，默认 false】Webhook 目标位于局域网/回环地址时才改 true。
-      - ALLOW_PRIVATE_WEBHOOKS=false
-      # 【可省略】普通登录会话小时数；省略时为 12。
-      - SESSION_HOURS=12
-      # 【可省略】勾选“记住我”后的天数；省略时为 30。
-      - REMEMBER_DAYS=30
     ports:
       # 【必填】默认只供同机反向代理访问；局域网直连可改为 "8080:8080"。
       - "127.0.0.1:8080:8080"
@@ -41,8 +29,3 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    deploy:
-      resources:
-        limits:
-          # 【可选】内存限制；影片很多或同步量大时可提高。
-          memory: 256M

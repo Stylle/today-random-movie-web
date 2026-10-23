@@ -24,7 +24,10 @@ RUN apk add --no-cache ca-certificates tzdata \
 WORKDIR /app
 COPY --from=backend /out/today-random-movie /app/today-random-movie
 COPY --from=frontend /src/frontend/dist /app/web
-USER 10001:10001
+# NAS bind mounts are commonly root-owned and cannot be chowned by Compose.
+# The runtime remains read-only, capability-free and no-new-privileges; root is
+# used only so the application can write its explicitly mounted /data volume.
+USER 0:0
 ENV DATA_DIR=/data WEB_DIR=/app/web PORT=8080 LISTEN_ADDR=:8080 TZ=Asia/Shanghai
 EXPOSE 8080
 VOLUME ["/data"]

@@ -62,11 +62,7 @@ func remoteIP(r *http.Request) string {
 
 func (a *App) clientIP(r *http.Request) string {
 	ip := remoteIP(r)
-	trusted := false
-	for _, pattern := range strings.Split(osEnv("TRUSTED_PROXIES"), ",") {
-		trusted = trusted || matchIP(ip, pattern)
-	}
-	if !trusted {
+	if !trustedProxy(r) {
 		return ip
 	}
 	if direct := strings.TrimSpace(r.Header.Get("X-Real-IP")); net.ParseIP(direct) != nil {
@@ -83,6 +79,39 @@ func (a *App) clientIP(r *http.Request) string {
 }
 
 func osEnv(key string) string { return env(key, "") }
+
+// trustedProxy uses an explicit allowlist when configured. Without one, only a
+// private/loopback peer is treated as a reverse proxy, which covers NAS tunnel
+// and local proxy services without trusting forwarded headers from the public
+// internet.
+func trustedProxy(r *http.Request) bool {
+	ip := remoteIP(r)
+	patterns := strings.TrimSpace(osEnv("TRUSTED_PROXIES"))
+	if patterns == "" {
+		return privateAddress(net.ParseIP(ip))
+	}
+	for _, pattern := range strings.Split(patterns, ",") {
+		if matchIP(ip, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+func forwardedHost(r *http.Request) string {
+	if !trustedProxy(r) {
+		return ""
+	}
+	value := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0])
+	if value == "" {
+		value = strings.TrimSpace(strings.Split(r.Header.Get("X-Original-Host"), ",")[0])
+	}
+	return value
+}
+
+func forwardedHTTPS(r *http.Request) bool {
+	return trustedProxy(r) && strings.EqualFold(strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]), "https")
+}
 
 func blockedAddress(ip net.IP) bool {
 	return ip == nil || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast()
@@ -101,10 +130,8 @@ func validateTarget(rawURL string, mode string) (*url.URL, error) {
 	if err != nil || len(ips) == 0 {
 		return nil, fmt.Errorf("目标域名无法解析")
 	}
-	allowPrivate := mode == "fnos" || truth(osEnv("ALLOW_PRIVATE_WEBHOOKS"))
-	allowPublic := mode == "webhook" || truth(osEnv("ALLOW_PUBLIC_FNOS"))
 	for _, ip := range ips {
-		if blockedAddress(ip) || (privateAddress(ip) && !allowPrivate) || (!privateAddress(ip) && !allowPublic) {
+		if blockedAddress(ip) {
 			return nil, fmt.Errorf("目标地址不在允许的网络范围")
 		}
 	}
@@ -129,10 +156,8 @@ func restrictedClient(mode string, timeout time.Duration) *http.Client {
 			if err != nil || len(ips) == 0 {
 				return nil, fmt.Errorf("目标域名无法解析")
 			}
-			allowPrivate := mode == "fnos" || truth(osEnv("ALLOW_PRIVATE_WEBHOOKS"))
-			allowPublic := mode == "webhook" || truth(osEnv("ALLOW_PUBLIC_FNOS"))
 			for _, ip := range ips {
-				if blockedAddress(ip) || (privateAddress(ip) && !allowPrivate) || (!privateAddress(ip) && !allowPublic) {
+				if blockedAddress(ip) {
 					continue
 				}
 				return (&net.Dialer{Timeout: 8 * time.Second, KeepAlive: 30 * time.Second}).DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
@@ -161,7 +186,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
 		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
-		if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		if r.TLS != nil || forwardedHTTPS(r) {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
 		next.ServeHTTP(w, r)

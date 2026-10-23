@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,6 +23,7 @@ func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 		respond(w, M{
 			"siteTitle": s["site_title"], "publicAccess": truth(s["public_access"]), "publicPlay": truth(s["public_play"]),
 			"fnServer": s["fn_server"], "fnUsername": username, "fnHasPassword": s["fn_password"] != "", "fnInsecureTls": truth(s["fn_insecure_tls"]),
+			"publicBaseUrl": s["public_base_url"], "metadataSource": s["metadata_source"], "tmdbHasToken": s["tmdb_token"] != "", "tmdbLanguage": s["tmdb_language"],
 			"lastSyncAt": s["last_sync_at"], "lastSyncError": s["last_sync_error"],
 		})
 	case p == "/api/admin/settings" && r.Method == http.MethodPatch:
@@ -39,6 +41,17 @@ func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 		}
 		if value, ok := v["publicPlay"]; ok {
 			updates["public_play"] = boolString(truth(value))
+		}
+		if value, ok := v["publicBaseUrl"]; ok {
+			base := strings.TrimSpace(str(value))
+			if base != "" {
+				u, err := url.Parse(base)
+				if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
+					fail(400, "公网访问地址必须是有效的 http/https URL")
+				}
+				base = strings.TrimSuffix(base, "/")
+			}
+			updates["public_base_url"] = base
 		}
 		a.updateSettings(updates)
 		respond(w, M{"ok": true})
@@ -63,6 +76,54 @@ func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 		}
 		a.updateSettings(updates)
 		a.resetClient()
+		respond(w, M{"ok": true})
+	case p == "/api/admin/tmdb" && r.Method == http.MethodPut:
+		v := readBody(r)
+		source := strings.ToLower(strings.TrimSpace(str(v["source"])))
+		if source != "fnos" && source != "auto" && source != "tmdb" {
+			fail(400, "元数据来源仅支持 fnos/auto/tmdb")
+		}
+		language := strings.TrimSpace(str(v["language"]))
+		if language == "" {
+			language = "zh-CN"
+		}
+		if len(language) > 16 || !regexp.MustCompile(`^[A-Za-z]{2,3}(?:-[A-Za-z]{2})?$`).MatchString(language) {
+			fail(400, "TMDB 语言格式无效，例如 zh-CN")
+		}
+		updates := map[string]string{"metadata_source": source, "tmdb_language": language}
+		if token := strings.TrimSpace(str(v["token"])); token != "" {
+			client, err := NewTMDBClient(token, language)
+			if err != nil {
+				fail(400, err.Error())
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+			err = client.Test(ctx)
+			cancel()
+			if err != nil {
+				fail(502, err.Error())
+			}
+			updates["tmdb_token"], err = seal(a.secret, token)
+			if err != nil {
+				fail(500, err.Error())
+			}
+		} else if truth(v["clearToken"]) {
+			updates["tmdb_token"] = ""
+		}
+		if source == "tmdb" && updates["tmdb_token"] == "" && a.getSetting("tmdb_token", "") == "" {
+			fail(400, "使用 TMDB 元数据前需要填写 API Read Access Token")
+		}
+		a.updateSettings(updates)
+		respond(w, M{"ok": true})
+	case p == "/api/admin/tmdb/test" && r.Method == http.MethodPost:
+		client, err := a.configuredTMDB()
+		if err != nil {
+			fail(400, err.Error())
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		if err = client.Test(ctx); err != nil {
+			fail(502, err.Error())
+		}
 		respond(w, M{"ok": true})
 	case p == "/api/admin/fnos/test" && r.Method == http.MethodPost:
 		client, err := a.configuredClient()

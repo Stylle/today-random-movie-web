@@ -2,6 +2,7 @@
 
 ## 已发布版本
 
+- `v0.2.0`：待本次发布完成后记录镜像摘要与构建链接
 - `v0.1.0`：已发布 `stylle/today-random-movie-web:v0.1.0`、`latest` 和 `8c76110`
 - 平台：`linux/amd64`、`linux/arm64`
 - 多架构清单摘要：`sha256:de31355c1373e0586f916344f11713eba2978b9831b5aca1b70eb2d54efd4735`
@@ -22,7 +23,7 @@ SETUP_TOKEN=qa-only docker compose up -d
 ## GitHub
 
 1. 将通过测试的源码提交到 `main`。
-2. 创建语义化版本标签，例如 `v0.1.0`。
+2. 创建语义化版本标签，例如 `v0.2.0`。
 3. 推送标签；Release workflow 会先测试，再构建 `linux/amd64`、`linux/arm64` 镜像。
 
 仓库需要设置 Actions secrets：

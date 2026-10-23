@@ -69,6 +69,36 @@ func TestMovieFilters(t *testing.T) {
 	}
 }
 
+func TestTunnelProxyOriginAndHTTPS(t *testing.T) {
+	t.Setenv("TRUSTED_PROXIES", "")
+	req := httptest.NewRequest(http.MethodPost, "http://container/api/auth/login", nil)
+	req.RemoteAddr = "172.18.0.5:41234"
+	req.Header.Set("Origin", "https://movie.example.com")
+	req.Header.Set("X-Forwarded-Host", "movie.example.com")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	if !sameOrigin(req) || !secureRequest(req) {
+		t.Fatal("private NAS reverse proxy headers should be accepted automatically")
+	}
+	req.RemoteAddr = "8.8.8.8:41234"
+	if sameOrigin(req) || secureRequest(req) {
+		t.Fatal("public direct peers must not be able to spoof proxy headers")
+	}
+}
+
+func TestTMDBMetadataMapping(t *testing.T) {
+	movie := Movie{Title: "流浪地球", Year: "2019", Genres: []string{"科幻"}, MetadataSource: "fnos"}
+	applyTMDB(&movie, tmdbMovie{ID: 535167, Title: "流浪地球", ReleaseDate: "2019-02-05", PosterPath: "/poster.jpg", Overview: "来自 TMDB 的简介", GenreIDs: []int{878, 18}, VoteAverage: 7.1})
+	if movie.TMDBID != "535167" || movie.TMDBPosterPath != "/poster.jpg" || movie.MetadataSource != "tmdb" {
+		t.Fatalf("TMDB identity mapping failed: %#v", movie)
+	}
+	if movie.Overview != "来自 TMDB 的简介" || len(movie.Genres) != 2 || movie.Rating != "7.1" {
+		t.Fatalf("TMDB details mapping failed: %#v", movie)
+	}
+	if normalizedTitle("Spider-Man: No Way Home") != normalizedTitle("Spider Man No Way Home") {
+		t.Fatal("title normalization should ignore punctuation")
+	}
+}
+
 func TestSetupSessionAndPublicRandom(t *testing.T) {
 	t.Setenv("SETUP_TOKEN", "setup-token-for-test")
 	a := newApp(t.TempDir(), t.TempDir())

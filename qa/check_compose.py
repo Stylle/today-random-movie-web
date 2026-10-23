@@ -19,14 +19,14 @@ def check_compose(name: str, expect_build: bool) -> None:
     assert "no-new-privileges:true" in service["security_opt"]
     environment = {item.split("=", 1)[0] for item in service["environment"]}
     assert "SETUP_TOKEN" in environment
-    assert "TRUSTED_PROXIES" in environment
+    assert environment == {"SETUP_TOKEN", "TZ"}
 
 
 def main() -> None:
     check_compose("docker-compose.yml", True)
     check_compose("docker-compose.hub.yml", False)
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-    assert "USER 10001:10001" in dockerfile
+    assert "USER 0:0" in dockerfile
     assert "HEALTHCHECK" in dockerfile
     assert "CGO_ENABLED=0" in dockerfile
     print("compose and Dockerfile security checks passed")
