@@ -50,6 +50,17 @@ volumes:
 
 如果飞牛的数据卷目录不同，直接修改冒号左侧的宿主机路径。其他参数也都集中在同一个 Compose 文件中。
 
+| 参数 | 是否必须 | 说明 |
+|---|---|---|
+| `SETUP_TOKEN` | 首次部署必填 | 至少 32 位随机字符串；首个管理员创建后可删除 |
+| `PUBLIC_BASE_URL` | 公网部署必填 | 填真实 HTTPS 地址；仅本地使用可省略 |
+| `/data` 数据卷 | 必填 | 保存数据库、加密密钥和海报缓存，必须备份 |
+| `TZ` | 可省略 | 默认 `Asia/Shanghai` |
+| `TRUSTED_PROXIES` | 使用反向代理时填写 | 只信任实际代理网段，禁止 `0.0.0.0/0` |
+| `ALLOW_PUBLIC_FNOS` | 可省略 | 默认 `false`；飞牛位于公网时才开启 |
+| `ALLOW_PRIVATE_WEBHOOKS` | 可省略 | 默认 `false`；推送目标位于私网时才开启 |
+| `SESSION_HOURS` / `REMEMBER_DAYS` | 可省略 | 默认分别为 12 小时和 30 天 |
+
 ### 2. 启动
 
 ```bash

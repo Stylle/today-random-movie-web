@@ -1,23 +1,34 @@
 services:
   movie:
+    # 【源码构建必需】从当前目录构建；只拉 Docker Hub 镜像请使用 docker-compose.hub.yml。
     build:
       context: .
     image: today-random-movie:local
     container_name: today-random-movie
     restart: always
     environment:
+      # 【可省略】省略时默认 Asia/Shanghai。
       - TZ=Asia/Shanghai
+      # 【首次部署必填】至少 32 位随机字符串；首个管理员创建成功后可删除。
       - SETUP_TOKEN=change-this-before-starting-at-least-32-characters
+      # 【可省略】本机访问地址；公网部署请改为真实 HTTPS 域名。
       - PUBLIC_BASE_URL=http://127.0.0.1:8080
+      # 【可省略】没有反向代理时保持为空或删除。
       - TRUSTED_PROXIES=
+      # 【可省略，默认 false】飞牛使用公网地址时才改 true。
       - ALLOW_PUBLIC_FNOS=false
+      # 【可省略，默认 false】Webhook 指向私网时才改 true。
       - ALLOW_PRIVATE_WEBHOOKS=false
+      # 【可省略】省略时分别为 12 小时和 30 天。
       - SESSION_HOURS=12
       - REMEMBER_DAYS=30
     ports:
+      # 【必填】局域网直连可改为 "8080:8080"。
       - "127.0.0.1:8080:8080"
     volumes:
+      # 【必填】不要删除，否则重建容器会丢失数据库、密钥和缓存。
       - ./data:/data
+    # 以下均为推荐安全约束，通常无需修改。
     read_only: true
     tmpfs:
       - /tmp:size=32m,mode=1777
@@ -28,4 +39,5 @@ services:
     deploy:
       resources:
         limits:
+          # 【可选】影片很多或同步量大时可提高。
           memory: 256M
