@@ -1,6 +1,6 @@
 # 今日想看
 
-飞牛影视媒体库随机选片器。所有页面登录后使用。
+飞牛影视媒体库随机选片器，用一个轻量网页决定今日想看。适合 NAS、本机电脑和小型 VPS，所有业务页面登录后使用。
 
 保留功能：
 
@@ -20,12 +20,12 @@ services:
     container_name: today-random-movie
     restart: always
     environment:
-      - USER=admin
-      - PASSWORD=change-this-password
+      - USER=admin # 首次初始化用户名；之后修改环境变量不会覆盖账号
+      - PASSWORD=change-this-password # 必改：至少 8 字符；仅首次创建
     ports:
-      - "8080:8080"
+      - "8080:8080" # 左侧访问端口可改，右侧不改
     volumes:
-      - /srv/today-random-movie/data:/data
+      - ./data:/data # 必须保留；左侧可改为宿主机专用目录
 ```
 
 首次启动时，`USER` 和 `PASSWORD` 创建管理员。之后修改环境变量不会覆盖已有账号。
@@ -38,6 +38,10 @@ docker compose up -d
 ```
 
 访问 `http://NAS-IP:8080`，登录后在“管理设置”中保存飞牛连接并同步。定时同步可在“连接与同步”页启用；年份筛选支持起止范围。
+
+无需 `.env`、setup-token 或域名变量。端口和数据挂载必须保留；不要把实际部署配置、密码或数据库上传 Git。
+
+[部署与故障排查](docs/guide.md) · [镜像版 Compose](docker-compose.hub.yml) · [发布说明](docs/release.md)
 
 ## 重置管理员
 

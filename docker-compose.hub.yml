@@ -6,10 +6,10 @@ services:
     restart: always
     environment:
       # 首次启动创建管理员；以后修改不会自动覆盖数据库。
-      - USER=admin
-      - PASSWORD=change-this-password
+      - USER=admin # 首次初始化用户名
+      - PASSWORD=change-this-password # 必改：至少 8 字符
     ports:
       - "8080:8080"
     volumes:
-      # 修改冒号左侧为飞牛上的实际数据目录。
-      - /srv/today-random-movie/data:/data
+      # 冒号左侧可改为宿主机专用绝对目录，右侧 /data 保留。
+      - ./data:/data
