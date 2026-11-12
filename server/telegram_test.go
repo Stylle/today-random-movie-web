@@ -170,10 +170,18 @@ func TestMovieBotCommandsReusePickAndFollowDefaults(t *testing.T) {
 	seedMovieBot(a)
 	movieBotMock(t, a, func(w http.ResponseWriter, r *http.Request, method string) { fmt.Fprint(w, `{"ok":true,"result":{}}`) })
 	cfg, rev := enableMovieBot(t, a, cookie)
-	for _, command := range []string{"meau", "MENU", "/menu@test_movie_bot", "/start", "help"} {
+	for _, command := range []string{"menu", "MENU", "/menu@test_movie_bot"} {
 		if botCommand(command) != "root" {
 			t.Fatalf("menu alias failed %s", command)
 		}
+	}
+	for _, command := range []string{"meau", "/meau", "help", "/help"} {
+		if botCommand(command) != "" {
+			t.Fatalf("removed command still accepted: %s", command)
+		}
+	}
+	if botCommand("/start") != "start" {
+		t.Fatal("start should only show onboarding text")
 	}
 	u := movieCommand(cfg, 1, "getmovie")
 	first, e := a.prepareMovieReply(context.Background(), cfg, rev, u)
@@ -204,7 +212,7 @@ func TestMovieBotMenuScopeAndReset(t *testing.T) {
 	cfg, rev := enableMovieBot(t, a, cookie)
 	ctx := context.Background()
 	id := int64(1)
-	root, e := a.prepareMovieReply(ctx, cfg, rev, movieCommand(cfg, id, "meau"))
+	root, e := a.prepareMovieReply(ctx, cfg, rev, movieCommand(cfg, id, "menu"))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -318,6 +326,16 @@ func TestMovieBotPollingAndCancellation(t *testing.T) {
 		case "sendMessage":
 			sent.Add(1)
 			fmt.Fprint(w, `{"ok":true,"result":{}}`)
+		case "setMyCommands":
+			var input struct {
+				Commands []struct {
+					Command string `json:"command"`
+				} `json:"commands"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil || len(input.Commands) != 2 || input.Commands[0].Command != "getmovie" || input.Commands[1].Command != "menu" {
+				t.Error("native commands must only contain getmovie and menu")
+			}
+			fmt.Fprint(w, `{"ok":true,"result":true}`)
 		default:
 			fmt.Fprint(w, `{"ok":true,"result":true}`)
 		}
@@ -448,5 +466,109 @@ func TestMovieBotRejectsWebhookAndRedactsErrors(t *testing.T) {
 	e := a.botCall(context.Background(), token, "sendMessage", M{}, nil)
 	if e == nil || strings.Contains(e.Error(), token) || strings.Contains(e.Error(), s.URL) || redirectHits.Load() != 0 {
 		t.Fatal("unsafe redirect or token error")
+	}
+}
+
+func assertMovieButtons(t *testing.T, payload M, wantURL bool) {
+	t.Helper()
+	var parsed struct {
+		Markup struct {
+			Buttons [][]struct {
+				Text     string `json:"text"`
+				URL      string `json:"url"`
+				Callback string `json:"callback_data"`
+			} `json:"inline_keyboard"`
+		} `json:"reply_markup"`
+	}
+	if err := json.Unmarshal([]byte(jsonString(payload)), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	buttons := parsed.Markup.Buttons
+	if len(buttons) != 1 || len(buttons[0]) != 2 {
+		t.Fatal("movie result should only have two buttons")
+	}
+	if buttons[0][0].Text != "再随机一部" || buttons[0][0].Callback == "" || buttons[0][1].Text != "打开飞牛影视" {
+		t.Fatal("unexpected movie actions")
+	}
+	if wantURL && buttons[0][1].URL == "" {
+		t.Fatal("missing FnOS play link")
+	}
+	if !wantURL && buttons[0][1].Callback == "" {
+		t.Fatal("unavailable play action must explain missing configuration")
+	}
+}
+
+func TestMovieResultOnlyTwoButtonsAndSettingsOnlyInMenu(t *testing.T) {
+	a, cookie := movieBotTestApp(t)
+	seedMovieBot(a)
+	movieBotMock(t, a, func(w http.ResponseWriter, r *http.Request, method string) { fmt.Fprint(w, `{"ok":true,"result":{}}`) })
+	cfg, rev := enableMovieBot(t, a, cookie)
+	ctx := context.Background()
+	result, err := a.prepareMovieReply(ctx, cfg, rev, movieCommand(cfg, 1, "getmovie"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMovieButtons(t, result, false)
+	missing, err := a.prepareMovieReply(ctx, cfg, rev, movieCallback(cfg, 2, movieButton(t, result, "打开飞牛影视")))
+	if err != nil || missing["reply_markup"] != nil || !strings.Contains(str(missing["text"]), "配置飞牛") {
+		t.Fatal("missing FnOS configuration should not open settings keyboard")
+	}
+	fnos := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("creating link must not contact FnOS") }))
+	defer fnos.Close()
+	a.updateSettings(map[string]string{"fn_server": fnos.URL})
+	rerolled, err := a.prepareMovieReply(ctx, cfg, rev, movieCallback(cfg, 3, movieButton(t, result, "再随机一部")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMovieButtons(t, rerolled, true)
+	menu, err := a.prepareMovieReply(ctx, cfg, rev, movieCommand(cfg, 4, "menu"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = movieButton(t, menu, "媒体库")
+	_ = movieButton(t, menu, "年份范围")
+	start, err := a.prepareMovieReply(ctx, cfg, rev, movieCommand(cfg, 5, "/start"))
+	if err != nil || start["reply_markup"] != nil {
+		t.Fatal("start should be a short introduction, not a duplicate settings menu")
+	}
+	a.saveBotFilters(cfg.ChatID, Filters{Genre: "不存在的类型"})
+	empty, err := a.prepareMovieReply(ctx, cfg, rev, movieCommand(cfg, 6, "getmovie"))
+	if err != nil || empty["reply_markup"] != nil || !strings.Contains(str(empty["text"]), "menu") {
+		t.Fatal("empty selection should point to menu without expanding it")
+	}
+}
+
+func TestNotificationRerollPreservesRuleScopeWithoutResendingWebhook(t *testing.T) {
+	a, cookie := movieBotTestApp(t)
+	seedMovieBot(a)
+	messages := make(chan M, 2)
+	movieBotMock(t, a, func(w http.ResponseWriter, r *http.Request, method string) {
+		var payload M
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		messages <- payload
+		fmt.Fprint(w, `{"ok":true,"result":{"message_id":1}}`)
+	})
+	cfg, rev := enableMovieBot(t, a, cookie)
+	a.updateSettings(map[string]string{"fn_server": "http://127.0.0.1:5666", "random_default_filters": jsonString(Filters{Genre: "悬疑"})})
+	a.saveBotFilters(cfg.ChatID, Filters{Libraries: []string{"b"}, Genre: "悬疑"})
+	if _, err := a.executeSchedule(notificationRule("telegram"), true); err != nil {
+		t.Fatal(err)
+	}
+	result := <-messages
+	assertMovieButtons(t, result, true)
+	for id := int64(1); id <= 2; id++ {
+		var err error
+		result, err = a.prepareMovieReply(context.Background(), cfg, rev, movieCallback(cfg, id, movieButton(t, result, "再随机一部")))
+		if err != nil || !strings.Contains(str(result["text"]), "未看剧情") {
+			t.Fatal("notification reroll lost the rule's original scope")
+		}
+		assertMovieButtons(t, result, true)
+	}
+	if a.count("SELECT COUNT(*) FROM webhook_logs") != 1 {
+		t.Fatal("reroll should not resend rule notifications")
+	}
+	filters, custom := a.botFilters(cfg.ChatID)
+	if !custom || filters.Genre != "悬疑" {
+		t.Fatal("rule reroll changed menu configuration")
 	}
 }

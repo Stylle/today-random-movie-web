@@ -40,10 +40,10 @@ jobs:
           docker run -d --name movie-test -e USER=admin -e PASSWORD=test-only-password -p 127.0.0.1:28181:8080 -v movie-test-data:/data movie:test
           trap 'docker logs movie-test; docker rm -f movie-test; docker volume rm movie-test-data' EXIT
           for n in $(seq 1 30); do curl -fsS http://127.0.0.1:28181/api/health && break || sleep 1; done
-          curl -fsS http://127.0.0.1:28181/api/health | grep '0.5.2'
+          curl -fsS http://127.0.0.1:28181/api/health | grep '0.5.3'
           docker restart movie-test
           for n in $(seq 1 30); do curl -fsS http://127.0.0.1:28181/api/health && break || sleep 1; done
-          curl -fsS http://127.0.0.1:28181/api/health | grep '0.5.2'
+          curl -fsS http://127.0.0.1:28181/api/health | grep '0.5.3'
 
   publish:
     needs: test

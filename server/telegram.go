@@ -386,8 +386,10 @@ func botCommand(text string) string {
 	switch cmd {
 	case "getmovie", "随机":
 		return "pick"
-	case "menu", "meau", "start", "help":
+	case "menu":
 		return "root"
+	case "start":
+		return "start"
 	}
 	return ""
 }
@@ -402,7 +404,7 @@ func authorizedMovieUpdate(cfg movieBotConfig, u movieBotUpdate) bool {
 }
 func (a *App) pollMovieBot(ctx context.Context, cfg movieBotConfig, revision string) {
 	chatID, _ := strconv.ParseInt(cfg.ChatID, 10, 64)
-	commands := []M{{"command": "getmovie", "description": "按当前范围随机一部影片"}, {"command": "menu", "description": "设置分类、年份与观看范围"}, {"command": "meau", "description": "打开范围设置菜单"}, {"command": "help", "description": "使用帮助"}}
+	commands := []M{{"command": "getmovie", "description": "按当前范围随机一部影片"}, {"command": "menu", "description": "设置分类、年份与观看范围"}}
 	_ = a.botCall(ctx, cfg.Token, "setMyCommands", M{"commands": commands, "scope": M{"type": "chat", "chat_id": chatID}}, nil)
 	_ = a.botCall(ctx, cfg.Token, "setChatMenuButton", M{"chat_id": chatID, "menu_button": M{"type": "commands"}}, nil)
 	for ctx.Err() == nil {
@@ -501,7 +503,7 @@ func (a *App) botMenu(cfg movieBotConfig, revision, screen string, page int) M {
 	f, custom := a.botFilters(cfg.ChatID)
 	button := func(label, action string, data M) M { return a.botButton(cfg, revision, label, action, data) }
 	keyboard := [][]M{}
-	text := "🎬 今日想看\n\n" + a.botSummary(f, custom) + "\n\n发送 getmovie 随机，发送 meau / menu 设置范围。"
+	text := "🎬 今日想看\n\n" + a.botSummary(f, custom) + "\n\n发送 getmovie 随机，发送 menu 设置范围。"
 	switch screen {
 	case "root", "":
 		keyboard = append(keyboard, []M{button("🎲 随机一部", "pick", M{})}, []M{button("媒体库", "screen", M{"screen": "libraries"}), button("影片类型", "screen", M{"screen": "genre"})}, []M{button("地区", "screen", M{"screen": "country"}), button("年份范围", "screen", M{"screen": "years"})}, []M{button("排除已观看："+map[bool]string{true: "开", false: "关"}[f.ExcludeWatched], "set", M{"field": "watched", "value": !f.ExcludeWatched})}, []M{button("恢复后台默认", "reset", M{})})
@@ -559,6 +561,27 @@ func (a *App) botMenu(cfg movieBotConfig, revision, screen string, page int) M {
 	return M{"chat_id": cfg.ChatID, "text": truncate(text, 1600), "reply_markup": M{"inline_keyboard": keyboard}, "link_preview_options": M{"is_disabled": true}}
 }
 
+// Result messages expose only the two actions relevant to that movie. A rule
+// notification carries its filter snapshot so rerolls retain that rule's scope.
+func (a *App) botMoviePayload(cfg movieBotConfig, revision string, movie Movie, filtersJSON string) M {
+	a.exec(`DELETE FROM telegram_movie_buttons WHERE expires<? OR rowid NOT IN(SELECT rowid FROM telegram_movie_buttons ORDER BY rowid DESC LIMIT 2000)`, time.Now().Unix())
+	data := M{}
+	if filtersJSON != "" {
+		data["filters"] = filtersJSON
+	}
+	reroll := a.botButton(cfg, revision, "再随机一部", "pick", data)
+	var play M
+	if server := a.getSetting("fn_server", ""); server != "" && movie.SourceID != "" {
+		if client, err := NewFnOSClient(server, "", "", false); err == nil {
+			play = M{"text": "打开飞牛影视", "url": client.PlayURL(movie.SourceID)}
+		}
+	}
+	if play == nil {
+		play = a.botButton(cfg, revision, "打开飞牛影视", "play-unavailable", M{})
+	}
+	return M{"chat_id": cfg.ChatID, "text": movieBotText(movie), "reply_markup": M{"inline_keyboard": [][]M{{reroll, play}}}, "link_preview_options": M{"is_disabled": true}}
+}
+
 // Persist the chosen response before sending, so network retries do not pick a
 // different movie or apply a menu action twice. Telegram delivery is at-least-once.
 func (a *App) prepareMovieReply(ctx context.Context, cfg movieBotConfig, revision string, u movieBotUpdate) (payload M, err error) {
@@ -598,6 +621,7 @@ func (a *App) prepareMovieReply(ctx context.Context, cfg movieBotConfig, revisio
 	if u.Message != nil {
 		action = botCommand(u.Message.Text)
 	} else if u.Callback != nil {
+		action = "expired"
 		row := a.one(`SELECT action,payload FROM telegram_movie_buttons WHERE token=? AND chat_id=? AND revision=? AND expires>?`, strings.TrimPrefix(u.Callback.Data, "mv:"), cfg.ChatID, revision, time.Now().Unix())
 		if strings.HasPrefix(u.Callback.Data, "mv:") && row != nil {
 			action = str(row["action"])
@@ -608,6 +632,12 @@ func (a *App) prepareMovieReply(ctx context.Context, cfg movieBotConfig, revisio
 	page := intValue(data["page"], 0)
 	movieID := ""
 	switch action {
+	case "start":
+		payload = M{"chat_id": cfg.ChatID, "text": "🎬 今日想看\n\n发送 /getmovie 随机一部影片，发送 /menu 设置选片范围。"}
+	case "expired":
+		payload = M{"chat_id": cfg.ChatID, "text": "按钮已过期，请发送 getmovie 重新随机，或发送 menu 设置范围。"}
+	case "play-unavailable":
+		payload = M{"chat_id": cfg.ChatID, "text": "暂无可用的飞牛播放链接，请先在网站后台配置飞牛连接并同步媒体库。"}
 	case "screen":
 		screen = str(data["screen"])
 	case "reset":
@@ -655,21 +685,20 @@ func (a *App) prepareMovieReply(ctx context.Context, cfg movieBotConfig, revisio
 		}
 		a.saveBotFilters(cfg.ChatID, f)
 	case "pick":
-		f, custom := a.botFilters(cfg.ChatID)
+		f, _ := a.botFilters(cfg.ChatID)
+		filtersJSON := str(data["filters"])
+		if filtersJSON != "" {
+			f = Filters{}
+			if err := json.Unmarshal([]byte(filtersJSON), &f); err != nil {
+				return nil, errors.New("选片范围无效，请发送 getmovie 重新选片")
+			}
+		}
 		movie, pickErr := a.chooseMovie(f)
-		payload = a.botMenu(cfg, revision, "root", 0)
 		if pickErr != nil {
-			payload["text"] = "当前范围下没有影片，请调整范围或先同步媒体库。\n\n" + a.botSummary(f, custom)
+			payload = M{"chat_id": cfg.ChatID, "text": "当前范围下没有影片，请发送 menu 调整范围，或先在网站同步媒体库。"}
 		} else {
 			movieID = movie.ID
-			payload["text"] = movieBotText(movie)
-			if server := a.getSetting("fn_server", ""); server != "" {
-				if client, e := NewFnOSClient(server, "", "", false); e == nil {
-					markup := payload["reply_markup"].(M)
-					keyboard := markup["inline_keyboard"].([][]M)
-					markup["inline_keyboard"] = append([][]M{{M{"text": "打开飞牛影片", "url": client.PlayURL(movie.SourceID)}}}, keyboard...)
-				}
-			}
+			payload = a.botMoviePayload(cfg, revision, movie, filtersJSON)
 		}
 	}
 	if payload == nil {

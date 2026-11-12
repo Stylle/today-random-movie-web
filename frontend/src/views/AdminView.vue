@@ -250,7 +250,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
       </template>
 
       <template v-if="tab === 'telegram'">
-        <div class="section-title"><div><span class="eyebrow">TELEGRAM</span><h1>机器人选片</h1><p>发送 getmovie 随机一部，发送 meau / menu 打开范围菜单。</p></div></div>
+        <div class="section-title"><div><span class="eyebrow">TELEGRAM</span><h1>机器人选片</h1><p>发送 getmovie 随机一部，发送 menu 设置范围。影片结果仅保留再随机与打开飞牛两个按钮。</p></div></div>
         <div class="panel">
           <label class="check-row"><input v-model="telegram.enabled" type="checkbox" /><span>启用 Telegram 机器人（默认关闭）</span></label>
           <div class="field-grid">

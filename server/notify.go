@@ -162,10 +162,10 @@ func movieBotText(movie Movie) string {
 	return truncate("🎬 今日想看\n\n"+movie.Title+"（"+movie.Year+"）\n类型："+strings.Join(movie.Genres, " / ")+"\n地区："+strings.Join(movie.Countries, " / ")+"\n媒体库："+movie.Library+"\n评分："+movie.Rating+"\n已观看："+map[bool]string{true: "是", false: "否"}[movie.Watched]+"\n\n"+movie.Overview, 1600)
 }
 
-func (a *App) sendTelegramNotification(event string, movie Movie, scheduleID, ruleName string) (ok bool, status int, message string) {
+func (a *App) sendTelegramNotification(event string, movie Movie, scheduleID, ruleName string, scope ...string) (ok bool, status int, message string) {
 	defer func() { a.logNotification("telegram", event, scheduleID, movie.ID, ok, status, message) }()
 	a.tgConfigMu.Lock()
-	cfg, _, err := a.botConfig()
+	cfg, revision, err := a.botConfig()
 	if err != nil || !cfg.Enabled || cfg.Token == "" || cfg.ChatID == "" {
 		a.tgConfigMu.Unlock()
 		return false, 0, "请先在 Telegram 机器人设置中启用机器人并绑定私聊"
@@ -190,12 +190,12 @@ func (a *App) sendTelegramNotification(event string, movie Movie, scheduleID, ru
 	if ruleName != "" {
 		text = "规则选片 · " + truncate(ruleName, 60) + "\n\n" + text
 	}
-	payload := M{"chat_id": cfg.ChatID, "text": truncate(text, 1600), "link_preview_options": M{"is_disabled": true}}
-	if server := a.getSetting("fn_server", ""); server != "" && movie.SourceID != "" {
-		if client, err := NewFnOSClient(server, "", "", false); err == nil {
-			payload["reply_markup"] = M{"inline_keyboard": [][]M{{{"text": "打开飞牛影片", "url": client.PlayURL(movie.SourceID)}}}}
-		}
+	filtersJSON := ""
+	if len(scope) > 0 {
+		filtersJSON = scope[0]
 	}
+	payload := a.botMoviePayload(cfg, revision, movie, filtersJSON)
+	payload["text"] = truncate(text, 1600)
 	if err := a.botCall(ctx, cfg.Token, "sendMessage", payload, nil); err != nil {
 		var apiErr movieBotError
 		if errors.As(err, &apiErr) {
@@ -322,7 +322,7 @@ func (a *App) executeSchedule(row M, automatic bool) (Movie, error) {
 		var ok bool
 		var message string
 		if channel == "telegram" {
-			ok, _, message = a.sendTelegramNotification("movie_pick", movie, str(row["id"]), str(row["name"]))
+			ok, _, message = a.sendTelegramNotification("movie_pick", movie, str(row["id"]), str(row["name"]), str(row["filters_json"]))
 		} else {
 			ok, _, message = a.sendWebhook("movie_pick", movie, str(row["id"]))
 		}
