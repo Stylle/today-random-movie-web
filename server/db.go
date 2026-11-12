@@ -109,6 +109,24 @@ func openDB(path string) *sql.DB {
 	}
 	_, err = db.Exec(schema)
 	must(err)
+	// Existing data folders are upgraded in place; historical rules/logs remain Webhook.
+	for _, migration := range []struct{ table, column, definition string }{
+		{"schedules", "notify_channel", "TEXT NOT NULL DEFAULT 'webhook'"},
+		{"webhook_logs", "channel", "TEXT NOT NULL DEFAULT 'webhook'"},
+	} {
+		rows, err := db.Query("PRAGMA table_info(" + migration.table + ")")
+		must(err)
+		found := false
+		for _, row := range scanRows(rows) {
+			if str(row["name"]) == migration.column {
+				found = true
+			}
+		}
+		if !found {
+			_, err = db.Exec("ALTER TABLE " + migration.table + " ADD COLUMN " + migration.column + " " + migration.definition)
+			must(err)
+		}
+	}
 	_, err = db.Exec("DELETE FROM settings WHERE key IN ('site_title','public_access','public_play','public_base_url','metadata_source','tmdb_token','tmdb_language')")
 	must(err)
 	return db

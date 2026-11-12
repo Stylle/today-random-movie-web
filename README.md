@@ -17,7 +17,7 @@
 ```yaml
 services:
   movie:
-    image: stylle/today-random-movie-web:v0.5.1
+    image: stylle/today-random-movie-web:v0.5.2
     container_name: today-random-movie
     restart: always
     environment:
@@ -51,6 +51,12 @@ docker compose up -d
 - 初始为全部分类、排除已观看。后台「默认随机范围」供网站、TG 默认模式和新建推送规则共用；TG 自定义范围单独保存，点击「恢复后台默认」重新跟随，已有推送规则不受影响。
 
 只响应绑定的私聊，不开放给其他用户或群聊。请勿与随手传等应用共用同一个机器人 Token；一个机器人只能由一个实例接收消息。Token 加密保存在 data，网页不回传已存 Token，留空表示不修改。消息和播放链接交给 Telegram 保存，机器人聊天不是端到端加密；播放仍需设备能访问飞牛并登录。
+
+## 规则通知
+
+管理设置 → 自动推送 → 新建或编辑规则，在「通知渠道」选择 Webhook、Telegram 机器人，或两者同时发送。旧规则仍默认为 Webhook；选择机器人前，先保存并启用机器人设置，可用「发送测试通知」确认送达，无需重复填写 Token。
+
+每日、每周、每月和「立即运行」均使用规则自身的选片范围，不受 TG 菜单自定义范围影响。双渠道只选一次，发送同一部影片；一个失败仍尝试另一个，结果在「运行记录 → 通知记录」分渠道显示。自动规则每周期最多尝试一次，不承诺送达或自动补发；部分失败后请先核对成功渠道，手动再次运行会重新选片、再次发送所选全部渠道。
 
 [部署与故障排查](docs/guide.md) · [镜像版 Compose](docker-compose.hub.yml) · [发布说明](docs/release.md)
 

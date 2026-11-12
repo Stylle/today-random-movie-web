@@ -29,6 +29,12 @@ func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 		a.saveTelegram(w, r)
 	case p == "/api/admin/telegram/test" && r.Method == http.MethodPost:
 		a.testTelegram(w, r)
+	case p == "/api/admin/telegram/send-test" && r.Method == http.MethodPost:
+		ok, _, message := a.sendTelegramNotification("test", Movie{Title: "Telegram 测试影片", Year: "2026", Genres: []string{"剧情"}, Rating: "8.6"}, "", "")
+		if !ok {
+			fail(502, message)
+		}
+		respond(w, M{"ok": true})
 	case p == "/api/admin/settings" && r.Method == http.MethodGet:
 		s := a.settings()
 		username, _ := openSealed(a.secret, s["fn_username"])
@@ -150,14 +156,14 @@ func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 		fields := cleanSchedule(v)
 		id := randomHex(8)
 		now := nowISO()
-		a.exec("INSERT INTO schedules(id,name,enabled,kind,time_of_day,timezone,weekday,day_of_month,filters_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", id, fields["name"], fields["enabled"], fields["kind"], fields["time"], fields["timezone"], fields["weekday"], fields["dayOfMonth"], jsonString(fields["filters"]), now, now)
+		a.exec("INSERT INTO schedules(id,name,enabled,kind,time_of_day,timezone,weekday,day_of_month,filters_json,notify_channel,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, fields["name"], fields["enabled"], fields["kind"], fields["time"], fields["timezone"], fields["weekday"], fields["dayOfMonth"], jsonString(fields["filters"]), fields["notifyChannel"], now, now)
 		respond(w, M{"ok": true, "id": id})
 	case strings.HasPrefix(p, "/api/admin/schedules/"):
 		a.scheduleItemRoute(w, r)
 	case p == "/api/admin/history" && r.Method == http.MethodGet:
 		items := a.rows("SELECT h.id,h.source,h.schedule_id,h.created_at,m.title,m.year FROM random_history h JOIN movies m ON m.id=h.movie_id ORDER BY h.id DESC LIMIT 100")
-		logs := a.rows("SELECT * FROM webhook_logs ORDER BY id DESC LIMIT 100")
-		respond(w, M{"random": items, "webhooks": logs})
+		logs := a.rows("SELECT l.*,s.name AS rule_name FROM webhook_logs l LEFT JOIN schedules s ON s.id=l.schedule_id ORDER BY l.id DESC LIMIT 100")
+		respond(w, M{"random": items, "webhooks": logs, "notifications": logs})
 	default:
 		fail(404, "not found")
 	}
@@ -202,6 +208,10 @@ func cleanSyncSchedule(v M) M {
 }
 
 func cleanSchedule(v M) M {
+	channel := fallback(str(v["notifyChannel"]), "webhook")
+	if channel != "webhook" && channel != "telegram" && channel != "both" {
+		fail(400, "通知渠道仅支持 webhook/telegram/both")
+	}
 	name := strings.TrimSpace(str(v["name"]))
 	if len([]rune(name)) < 1 || len([]rune(name)) > 60 {
 		fail(400, "规则名称需为 1-60 个字符")
@@ -230,7 +240,7 @@ func cleanSchedule(v M) M {
 	if filters == nil {
 		filters = M{}
 	}
-	return M{"name": name, "enabled": boolInt(truth(v["enabled"])), "kind": kind, "time": timeOfDay, "timezone": tz, "weekday": weekday, "dayOfMonth": day, "filters": filters}
+	return M{"name": name, "enabled": boolInt(truth(v["enabled"])), "kind": kind, "time": timeOfDay, "timezone": tz, "weekday": weekday, "dayOfMonth": day, "filters": filters, "notifyChannel": channel}
 }
 
 func (a *App) scheduleItemRoute(w http.ResponseWriter, r *http.Request) {
@@ -251,8 +261,12 @@ func (a *App) scheduleItemRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodPut:
-		fields := cleanSchedule(readBody(r))
-		a.exec("UPDATE schedules SET name=?,enabled=?,kind=?,time_of_day=?,timezone=?,weekday=?,day_of_month=?,filters_json=?,updated_at=? WHERE id=?", fields["name"], fields["enabled"], fields["kind"], fields["time"], fields["timezone"], fields["weekday"], fields["dayOfMonth"], jsonString(fields["filters"]), nowISO(), id)
+		input := readBody(r)
+		if _, provided := input["notifyChannel"]; !provided {
+			input["notifyChannel"] = row["notify_channel"]
+		}
+		fields := cleanSchedule(input)
+		a.exec("UPDATE schedules SET name=?,enabled=?,kind=?,time_of_day=?,timezone=?,weekday=?,day_of_month=?,filters_json=?,notify_channel=?,updated_at=? WHERE id=?", fields["name"], fields["enabled"], fields["kind"], fields["time"], fields["timezone"], fields["weekday"], fields["dayOfMonth"], jsonString(fields["filters"]), fields["notifyChannel"], nowISO(), id)
 		respond(w, M{"ok": true})
 	case http.MethodDelete:
 		a.exec("DELETE FROM schedules WHERE id=?", id)

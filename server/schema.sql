@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS schedules (
     weekday       INTEGER NOT NULL DEFAULT 1,
     day_of_month  INTEGER NOT NULL DEFAULT 1,
     filters_json  TEXT NOT NULL DEFAULT '{}',
+    notify_channel TEXT NOT NULL DEFAULT 'webhook',
     last_run_key  TEXT NOT NULL DEFAULT '',
     last_run_at   TEXT NOT NULL DEFAULT '',
     created_at    TEXT NOT NULL,
@@ -70,6 +71,7 @@ CREATE TABLE IF NOT EXISTS schedules (
 CREATE TABLE IF NOT EXISTS webhook_logs (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     event        TEXT NOT NULL,
+    channel      TEXT NOT NULL DEFAULT 'webhook',
     schedule_id  TEXT NOT NULL DEFAULT '',
     movie_id     TEXT NOT NULL DEFAULT '',
     ok           INTEGER NOT NULL,

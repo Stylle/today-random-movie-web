@@ -30,29 +30,31 @@ type syncState struct {
 }
 
 type App struct {
-	db         *sql.DB
-	dataDir    string
-	webDir     string
-	secret     []byte
-	writeMu    sync.Mutex
-	fnMu       sync.Mutex
-	fnClient   *FnOSClient
-	posterMu   sync.Mutex
-	syncMu     sync.Mutex
-	syncState  syncState
-	stop       chan struct{}
-	tgConfigMu sync.Mutex
-	tgMu       sync.Mutex
-	tgCancel   context.CancelFunc
-	tgWake     chan struct{}
-	tgHTTP     *http.Client
-	tgBase     string // Fixed official endpoint; isolated tests may override it.
+	db            *sql.DB
+	dataDir       string
+	webDir        string
+	secret        []byte
+	writeMu       sync.Mutex
+	fnMu          sync.Mutex
+	fnClient      *FnOSClient
+	posterMu      sync.Mutex
+	syncMu        sync.Mutex
+	syncState     syncState
+	stop          chan struct{}
+	tgConfigMu    sync.Mutex
+	tgMu          sync.Mutex
+	tgCancel      context.CancelFunc
+	tgSendCancels map[string]context.CancelFunc
+	tgWake        chan struct{}
+	tgHTTP        *http.Client
+	tgBase        string // Fixed official endpoint; isolated tests may override it.
 }
 
 func newApp(dataDir, webDir string) *App {
 	must(os.MkdirAll(filepath.Join(dataDir, "posters"), 0750))
 	a := &App{dataDir: dataDir, webDir: webDir, secret: loadSecret(dataDir), stop: make(chan struct{})}
 	a.tgWake = make(chan struct{}, 1)
+	a.tgSendCancels = make(map[string]context.CancelFunc)
 	a.tgHTTP = &http.Client{Timeout: 70 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	a.tgBase = "https://api.telegram.org"
 	a.db = openDB(filepath.Join(dataDir, "app.db"))
@@ -165,7 +167,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const version = "0.5.1"
+const version = "0.5.2"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
@@ -202,6 +204,7 @@ func main() {
 	defer func() { done(); telegram.Wait() }()
 	go func() {
 		<-stop.Done()
+		a.wakeMovieBot()
 		close(a.stop)
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()

@@ -29,7 +29,7 @@ const bad = ref(false)
 const busy = ref('')
 let poll
 
-const freshSchedule = () => ({ name: '每日推荐', enabled: true, kind: 'daily', time: '20:00', timezone: 'Asia/Shanghai', weekday: 5, dayOfMonth: 1, filters: JSON.parse(JSON.stringify(defaultFilters.value)) })
+const freshSchedule = () => ({ name: '每日推荐', enabled: true, kind: 'daily', time: '20:00', timezone: 'Asia/Shanghai', weekday: 5, dayOfMonth: 1, notifyChannel: 'webhook', filters: JSON.parse(JSON.stringify(defaultFilters.value)) })
 const scheduleForm = ref(freshSchedule())
 const editing = ref('')
 const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
@@ -69,9 +69,9 @@ async function loadAll() {
   if (job.running) startPoll()
 }
 
-async function run(label, task) {
+async function run(label, task, successMessage = '已保存并生效') {
   busy.value = label
-  try { await task(); flash('已保存并生效') } catch (e) { flash(e.message, true) } finally { busy.value = '' }
+  try { await task(); flash(successMessage) } catch (e) { flash(e.message, true) } finally { busy.value = '' }
 }
 
 const saveFn = () => run('fn', async () => {
@@ -124,6 +124,7 @@ const testTelegram = () => run('telegram-test', async () => {
   if (telegramChats.value.length === 1) telegram.value.chatId = telegramChats.value[0]
   telegramNotice.value = telegramChats.value.length ? '连接正常，已检测到私聊 ID，请核对后保存。' : `连接正常。请向 @${result.username || '你的机器人'} 发送 /start 后重新检测；启用期间仅显示已绑定 ID。`
 })
+const sendTelegramTest = () => run('telegram-send-test', () => api('/api/admin/telegram/send-test', { method: 'POST' }), '测试通知已发送到绑定的私聊')
 const saveDefaultFilters = () => run('default-filters', async () => {
   const result = await api('/api/admin/random-defaults', { method: 'PUT', body: jsonBody({ filters: defaultFilters.value }) })
   defaultFilters.value = result.filters
@@ -138,7 +139,7 @@ const telegramPoll = setInterval(async () => {
 }, 15000)
 function editRule(rule = null) {
   editing.value = rule?.id || ''
-  scheduleForm.value = rule ? JSON.parse(JSON.stringify(rule)) : freshSchedule()
+  scheduleForm.value = rule ? { ...JSON.parse(JSON.stringify(rule)), notifyChannel: rule.notifyChannel || 'webhook' } : freshSchedule()
 }
 
 async function saveRule() {
@@ -161,12 +162,15 @@ async function removeRule(id) {
 }
 
 async function runRule(id) {
-  await run('schedule-run', async () => {
+  busy.value = 'schedule-run'
+  try {
     const result = await api(`/api/admin/schedules/${id}/run`, { method: 'POST' })
     flash(`已推送：${result.movie.title}`)
-    await refreshHistory()
-  })
+  } catch (e) { flash(e.message, true) }
+  finally { busy.value = ''; await refreshHistory().catch(() => {}) }
 }
+
+const channelLabel = channel => ({ webhook: 'Webhook', telegram: 'Telegram 机器人', both: 'Webhook + Telegram' }[channel || 'webhook'] || '未知渠道')
 
 async function refreshHistory() { history.value = await api('/api/admin/history') }
 async function purgePosters() {
@@ -254,7 +258,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
             <label class="field"><span>允许的私聊 Chat ID</span><input v-model="telegram.chatId" inputmode="numeric" placeholder="先私聊机器人发送 /start，再检测" /></label>
             <label v-if="telegramChats.length" class="field"><span>检测到的私聊</span><select v-model="telegram.chatId"><option value="">请核对选择</option><option v-for="id in telegramChats" :key="id" :value="id">{{ id }}</option></select></label>
           </div>
-          <div class="action-row"><button class="primary" :disabled="busy === 'telegram'" @click="saveTelegram">{{ busy === 'telegram' ? '保存中…' : '保存机器人设置' }}</button><button class="ghost" :disabled="busy === 'telegram-test'" @click="testTelegram">检测连接 / 识别私聊 ID</button></div>
+          <div class="action-row"><button class="primary" :disabled="busy === 'telegram'" @click="saveTelegram">{{ busy === 'telegram' ? '保存中…' : '保存机器人设置' }}</button><button class="ghost" :disabled="busy === 'telegram-test'" @click="testTelegram">检测连接 / 识别私聊 ID</button><button class="ghost" :disabled="busy === 'telegram-send-test' || !telegramLive" @click="sendTelegramTest">发送测试通知</button></div>
           <p v-if="telegramNotice" class="muted">{{ telegramNotice }}</p>
           <p class="muted">{{ telegramLive ? '已启用' : '已关闭' }} · TG 范围：{{ telegram.customRange ? '自定义（在机器人菜单中恢复默认）' : '跟随后台默认' }}<span v-if="telegram.lastReceived"> · 最近处理 {{ new Date(telegram.lastReceived).toLocaleString() }}</span></p>
           <p v-if="telegram.lastError" class="inline-error">{{ telegram.lastError }}</p>
@@ -270,7 +274,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
       <template v-if="tab === 'schedules'">
         <div class="section-title"><div><span class="eyebrow">BUILT-IN CRON</span><h1>自动推送</h1><p>应用内置调度器，无需在宿主机维护 crontab。</p></div></div>
         <div class="schedule-grid">
-          <article class="rule-card" v-for="rule in schedules" :key="rule.id" :class="{ off: !rule.enabled }"><div class="rule-head"><span class="rule-icon">◷</span><span class="status-dot on" v-if="rule.enabled">启用</span><span class="status-dot" v-else>停用</span></div><h3>{{ rule.name }}</h3><p>{{ ruleSummary(rule) }}</p><small v-if="rule.lastRunAt">上次：{{ new Date(rule.lastRunAt).toLocaleString() }}</small><div class="rule-actions"><button class="text-btn" @click="runRule(rule.id)">立即运行</button><button class="text-btn" @click="editRule(rule)">编辑</button><button class="text-btn danger-text" @click="removeRule(rule.id)">删除</button></div></article>
+          <article class="rule-card" v-for="rule in schedules" :key="rule.id" :class="{ off: !rule.enabled }"><div class="rule-head"><span class="rule-icon">◷</span><span class="status-dot on" v-if="rule.enabled">启用</span><span class="status-dot" v-else>停用</span></div><h3>{{ rule.name }}</h3><p>{{ ruleSummary(rule) }}</p><p>{{ channelLabel(rule.notifyChannel) }}</p><small v-if="rule.lastRunAt">上次：{{ new Date(rule.lastRunAt).toLocaleString() }}</small><div class="rule-actions"><button class="text-btn" :disabled="busy === 'schedule-run'" @click="runRule(rule.id)">立即运行</button><button class="text-btn" @click="editRule(rule)">编辑</button><button class="text-btn danger-text" @click="removeRule(rule.id)">删除</button></div></article>
           <button class="rule-card add-rule" @click="editRule()"><span>＋</span><b>新建推送规则</b><small>每日、每周或每月</small></button>
         </div>
         <div class="panel rule-editor">
@@ -280,9 +284,11 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
             <label class="field"><span>时区</span><input v-model="scheduleForm.timezone" placeholder="Asia/Shanghai" /></label>
             <label class="field"><span>周期</span><select v-model="scheduleForm.kind"><option value="daily">每日</option><option value="weekly">每周</option><option value="monthly">每月</option></select></label>
             <label class="field"><span>推送时间</span><input v-model="scheduleForm.time" type="time" /></label>
+            <label class="field span-2"><span>通知渠道</span><select v-model="scheduleForm.notifyChannel"><option value="webhook">Webhook</option><option value="telegram">Telegram 机器人</option><option value="both">Webhook + Telegram（同时发送）</option></select><small>机器人通知发送到「Telegram 机器人」中已保存并启用的绑定私聊；无需再填写 Token。</small></label>
             <label v-if="scheduleForm.kind === 'weekly'" class="field"><span>星期</span><select v-model.number="scheduleForm.weekday"><option v-for="(day, index) in weekdays" :key="day" :value="index">{{ day }}</option></select></label>
             <label v-if="scheduleForm.kind === 'monthly'" class="field"><span>每月日期</span><input v-model.number="scheduleForm.dayOfMonth" type="number" min="1" max="28" /></label>
           </div>
+          <p v-if="scheduleForm.notifyChannel !== 'webhook' && !telegramLive" class="inline-error">机器人尚未启用。可以先保存规则，但运行前请配置并启用 Telegram 机器人。</p>
           <label class="check-row"><input v-model="scheduleForm.enabled" type="checkbox" /><span>启用这条规则</span></label>
           <FilterPanel v-model="scheduleForm.filters" :options="options" compact />
           <div class="action-row"><button class="primary" :disabled="busy === 'schedule'" @click="saveRule">{{ busy === 'schedule' ? '保存中…' : editing ? '保存修改' : '创建规则' }}</button><button v-if="editing" class="ghost" @click="editRule()">取消编辑</button></div>
@@ -290,9 +296,9 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
       </template>
 
       <template v-if="tab === 'history'">
-        <div class="section-title"><div><span class="eyebrow">AUDIT TRAIL</span><h1>运行记录</h1><p>最近 100 条随机与 Webhook 结果。</p></div><button class="ghost compact" @click="refreshHistory">刷新</button></div>
+        <div class="section-title"><div><span class="eyebrow">AUDIT TRAIL</span><h1>运行记录</h1><p>最近 100 条随机与通知结果；双渠道分别记录，部分失败请核对后再运行。</p></div><button class="ghost compact" @click="refreshHistory">刷新</button></div>
         <div class="panel"><h3>最近选片</h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>影片</th><th>来源</th></tr></thead><tbody><tr v-for="row in history.random" :key="row.id"><td>{{ new Date(row.created_at).toLocaleString() }}</td><td>{{ row.title }} <small>{{ row.year }}</small></td><td>{{ row.source }}</td></tr></tbody></table></div></div>
-        <div class="panel"><h3>Webhook</h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>事件</th><th>状态</th><th>错误</th></tr></thead><tbody><tr v-for="row in history.webhooks" :key="row.id"><td>{{ new Date(row.created_at).toLocaleString() }}</td><td>{{ row.event }}</td><td><span :class="row.ok ? 'ok-text' : 'danger-text'">{{ row.ok ? `HTTP ${row.status_code}` : '失败' }}</span></td><td>{{ row.error }}</td></tr></tbody></table></div></div>
+        <div class="panel"><h3>通知记录</h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>渠道</th><th>事件 / 规则</th><th>状态</th><th>错误</th></tr></thead><tbody><tr v-for="row in (history.notifications || history.webhooks)" :key="row.id"><td>{{ new Date(row.created_at).toLocaleString() }}</td><td>{{ channelLabel(row.channel) }}</td><td>{{ row.event === 'test' ? '测试通知' : row.event === 'movie_pick' ? '影片推荐' : row.event }}<small v-if="row.schedule_id"> · {{ row.rule_name || row.schedule_id }}</small></td><td><span :class="row.ok ? 'ok-text' : 'danger-text'">{{ row.ok ? (row.channel === 'telegram' ? '已发送' : `HTTP ${row.status_code}`) : '失败' }}</span></td><td>{{ row.error }}</td></tr></tbody></table></div></div>
       </template>
     </section>
     <div v-if="message" class="toast" :class="{ bad }">{{ message }}</div>

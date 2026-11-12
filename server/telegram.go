@@ -285,6 +285,9 @@ func (a *App) wakeMovieBot() {
 	if a.tgCancel != nil {
 		a.tgCancel()
 	}
+	for _, cancel := range a.tgSendCancels {
+		cancel()
+	}
 	a.tgMu.Unlock()
 	select {
 	case a.tgWake <- struct{}{}:
@@ -659,7 +662,7 @@ func (a *App) prepareMovieReply(ctx context.Context, cfg movieBotConfig, revisio
 			payload["text"] = "当前范围下没有影片，请调整范围或先同步媒体库。\n\n" + a.botSummary(f, custom)
 		} else {
 			movieID = movie.ID
-			payload["text"] = truncate("🎬 今日想看\n\n"+movie.Title+"（"+movie.Year+"）\n类型："+strings.Join(movie.Genres, " / ")+"\n地区："+strings.Join(movie.Countries, " / ")+"\n媒体库："+movie.Library+"\n评分："+movie.Rating+"\n已观看："+map[bool]string{true: "是", false: "否"}[movie.Watched]+"\n\n"+movie.Overview, 1600)
+			payload["text"] = movieBotText(movie)
 			if server := a.getSetting("fn_server", ""); server != "" {
 				if client, e := NewFnOSClient(server, "", "", false); e == nil {
 					markup := payload["reply_markup"].(M)

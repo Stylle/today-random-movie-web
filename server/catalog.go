@@ -516,7 +516,7 @@ func scanSchedule(row M) M {
 		filters["yearFrom"], filters["yearTo"] = year, year
 	}
 	delete(filters, "year")
-	return M{"id": row["id"], "name": row["name"], "enabled": num(row["enabled"]) != 0, "kind": row["kind"], "time": row["time_of_day"], "timezone": row["timezone"], "weekday": row["weekday"], "dayOfMonth": row["day_of_month"], "filters": filters, "lastRunAt": row["last_run_at"]}
+	return M{"id": row["id"], "name": row["name"], "enabled": num(row["enabled"]) != 0, "kind": row["kind"], "time": row["time_of_day"], "timezone": row["timezone"], "weekday": row["weekday"], "dayOfMonth": row["day_of_month"], "filters": filters, "lastRunAt": row["last_run_at"], "notifyChannel": fallback(str(row["notify_channel"]), "webhook")}
 }
 
 var _ sql.Result
