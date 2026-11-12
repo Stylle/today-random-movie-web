@@ -16,6 +16,19 @@ import (
 func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.Path
 	switch {
+	case p == "/api/admin/random-defaults" && r.Method == http.MethodPut:
+		filters, err := cleanDefaultFilters(readBody(r)["filters"])
+		if err != nil {
+			fail(400, err.Error())
+		}
+		a.updateSettings(map[string]string{"random_default_filters": jsonString(filters)})
+		respond(w, M{"filters": filters})
+	case p == "/api/admin/telegram" && r.Method == http.MethodGet:
+		a.telegramSettings(w)
+	case p == "/api/admin/telegram" && r.Method == http.MethodPut:
+		a.saveTelegram(w, r)
+	case p == "/api/admin/telegram/test" && r.Method == http.MethodPost:
+		a.testTelegram(w, r)
 	case p == "/api/admin/settings" && r.Method == http.MethodGet:
 		s := a.settings()
 		username, _ := openSealed(a.secret, s["fn_username"])

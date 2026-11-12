@@ -7,6 +7,7 @@ import FilterPanel from '../components/FilterPanel.vue'
 const tabs = [
   { id: 'connection', label: '连接与同步', icon: '⌁' },
   { id: 'webhook', label: 'Webhook', icon: '↗' },
+  { id: 'telegram', label: 'Telegram 机器人', icon: '✈' },
   { id: 'schedules', label: '自动推送', icon: '◷' },
   { id: 'history', label: '运行记录', icon: '≡' },
 ]
@@ -18,12 +19,17 @@ const options = ref({ libraries: [], genres: [], years: [], countries: [] })
 const sync = ref({ running: false })
 const syncSchedule = ref({ enabled: false, kind: 'daily', time: '03:00', timezone: 'Asia/Shanghai', weekday: 1, lastRunAt: '' })
 const history = ref({ random: [], webhooks: [] })
+const defaultFilters = ref({ libraries: [], genre: '', country: '', yearFrom: '', yearTo: '', excludeWatched: true })
+const telegram = ref({ enabled: false, chatId: '', token: '', hasToken: false, revision: '', lastError: '', lastReceived: '', customRange: false })
+const telegramLive = ref(false)
+const telegramChats = ref([])
+const telegramNotice = ref('')
 const message = ref('')
 const bad = ref(false)
 const busy = ref('')
 let poll
 
-const freshSchedule = () => ({ name: '每日推荐', enabled: true, kind: 'daily', time: '20:00', timezone: 'Asia/Shanghai', weekday: 5, dayOfMonth: 1, filters: { libraries: [], genre: '', country: '', yearFrom: '', yearTo: '', excludeWatched: true } })
+const freshSchedule = () => ({ name: '每日推荐', enabled: true, kind: 'daily', time: '20:00', timezone: 'Asia/Shanghai', weekday: 5, dayOfMonth: 1, filters: JSON.parse(JSON.stringify(defaultFilters.value)) })
 const scheduleForm = ref(freshSchedule())
 const editing = ref('')
 const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
@@ -44,9 +50,10 @@ function flash(text, isBad = false) {
 }
 
 async function loadAll() {
-  const [s, w, rules, opts, job, syncRule, runs] = await Promise.all([
+  const [s, w, rules, opts, job, syncRule, runs, tg, defaults] = await Promise.all([
     api('/api/admin/settings'), api('/api/admin/webhook'), api('/api/admin/schedules'),
     api('/api/movies/options'), api('/api/admin/sync'), api('/api/admin/sync-schedule'), api('/api/admin/history'),
+    api('/api/admin/telegram'), api('/api/random/defaults'),
   ])
   settings.value = { ...s, fnPassword: '' }
   webhook.value = w
@@ -55,6 +62,10 @@ async function loadAll() {
   sync.value = job
   syncSchedule.value = syncRule
   history.value = runs
+  telegram.value = { ...tg, token: '' }
+  telegramLive.value = !!tg.enabled
+  defaultFilters.value = defaults.filters
+  if (!editing.value) scheduleForm.value.filters = JSON.parse(JSON.stringify(defaults.filters))
   if (job.running) startPoll()
 }
 
@@ -102,6 +113,29 @@ const saveSyncSchedule = () => run('sync-schedule', async () => {
   syncSchedule.value = await api('/api/admin/sync-schedule', { method: 'PUT', body: jsonBody(syncSchedule.value) })
 })
 const testWebhook = () => run('webhook-test', async () => { await api('/api/admin/webhook/test', { method: 'POST' }); flash('测试消息已发送') })
+const saveTelegram = () => run('telegram', async () => {
+  await api('/api/admin/telegram', { method: 'PUT', body: jsonBody({ enabled: telegram.value.enabled, token: telegram.value.token.trim(), chatId: telegram.value.chatId.trim(), revision: telegram.value.revision }) })
+  telegram.value = { ...await api('/api/admin/telegram'), token: '' }
+  telegramLive.value = !!telegram.value.enabled
+})
+const testTelegram = () => run('telegram-test', async () => {
+  const result = await api('/api/admin/telegram/test', { method: 'POST', body: jsonBody({ token: telegram.value.token.trim() }) })
+  telegramChats.value = result.chats || []
+  if (telegramChats.value.length === 1) telegram.value.chatId = telegramChats.value[0]
+  telegramNotice.value = telegramChats.value.length ? '连接正常，已检测到私聊 ID，请核对后保存。' : `连接正常。请向 @${result.username || '你的机器人'} 发送 /start 后重新检测；启用期间仅显示已绑定 ID。`
+})
+const saveDefaultFilters = () => run('default-filters', async () => {
+  const result = await api('/api/admin/random-defaults', { method: 'PUT', body: jsonBody({ filters: defaultFilters.value }) })
+  defaultFilters.value = result.filters
+})
+const telegramPoll = setInterval(async () => {
+  if (tab.value !== 'telegram' || !store.user || document.hidden) return
+  try {
+    const result = await api('/api/admin/telegram')
+    telegramLive.value = !!result.enabled
+    Object.assign(telegram.value, { lastError: result.lastError, lastReceived: result.lastReceived, customRange: result.customRange })
+  } catch (_) {}
+}, 15000)
 function editRule(rule = null) {
   editing.value = rule?.id || ''
   scheduleForm.value = rule ? JSON.parse(JSON.stringify(rule)) : freshSchedule()
@@ -154,7 +188,7 @@ watch(() => store.user?.id, async userID => {
   if (!userID || settings.value) return
   try { await loadAll() } catch (e) { flash(e.message, true) }
 }, { immediate: true })
-onUnmounted(() => clearInterval(poll))
+onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
 </script>
 
 <template>
@@ -208,6 +242,28 @@ onUnmounted(() => clearInterval(poll))
             <label class="field span-2"><span>正文模板（留空使用内置格式）</span><textarea v-model="webhook.bodyTemplate" rows="8" :placeholder="webhookPlaceholder"></textarea><small v-pre>变量：{{title}} {{text}} {{movie}} {{year}} {{genres}} {{rating}} {{fields}}</small></label>
           </div>
           <div class="action-row"><button class="primary" :disabled="busy === 'webhook'" @click="saveWebhook">{{ busy === 'webhook' ? '保存中…' : '保存 Webhook' }}</button><button class="ghost" :disabled="busy === 'webhook-test' || !webhook.url" @click="testWebhook">{{ busy === 'webhook-test' ? '发送中…' : '发送测试' }}</button></div>
+        </div>
+      </template>
+
+      <template v-if="tab === 'telegram'">
+        <div class="section-title"><div><span class="eyebrow">TELEGRAM</span><h1>机器人选片</h1><p>发送 getmovie 随机一部，发送 meau / menu 打开范围菜单。</p></div></div>
+        <div class="panel">
+          <label class="check-row"><input v-model="telegram.enabled" type="checkbox" /><span>启用 Telegram 机器人（默认关闭）</span></label>
+          <div class="field-grid">
+            <label class="field span-2"><span>Bot Token</span><input v-model="telegram.token" type="password" autocomplete="new-password" :placeholder="telegram.hasToken ? 'Token 已加密保存；留空保持不变' : '从 @BotFather 获取专用机器人 Token'" /></label>
+            <label class="field"><span>允许的私聊 Chat ID</span><input v-model="telegram.chatId" inputmode="numeric" placeholder="先私聊机器人发送 /start，再检测" /></label>
+            <label v-if="telegramChats.length" class="field"><span>检测到的私聊</span><select v-model="telegram.chatId"><option value="">请核对选择</option><option v-for="id in telegramChats" :key="id" :value="id">{{ id }}</option></select></label>
+          </div>
+          <div class="action-row"><button class="primary" :disabled="busy === 'telegram'" @click="saveTelegram">{{ busy === 'telegram' ? '保存中…' : '保存机器人设置' }}</button><button class="ghost" :disabled="busy === 'telegram-test'" @click="testTelegram">检测连接 / 识别私聊 ID</button></div>
+          <p v-if="telegramNotice" class="muted">{{ telegramNotice }}</p>
+          <p class="muted">{{ telegramLive ? '已启用' : '已关闭' }} · TG 范围：{{ telegram.customRange ? '自定义（在机器人菜单中恢复默认）' : '跟随后台默认' }}<span v-if="telegram.lastReceived"> · 最近处理 {{ new Date(telegram.lastReceived).toLocaleString() }}</span></p>
+          <p v-if="telegram.lastError" class="inline-error">{{ telegram.lastError }}</p>
+          <p class="muted">只响应指定私聊，不开放给其他人或群聊；无需公网回调。请为本项目创建独立机器人，不与随手传等服务共用 Token。机器人聊天不是端到端加密；推荐详情和飞牛链接会交给 Telegram 保存。</p>
+        </div>
+        <div class="panel">
+          <h3>默认随机范围</h3><p class="muted">网站首次进入、TG 默认范围和新建推送规则共用此设置；初始为全部分类、排除已观看。TG 菜单自定义不会修改这里，已有推送规则也不会被覆盖。</p>
+          <FilterPanel v-model="defaultFilters" :options="options" compact />
+          <div class="action-row"><button class="primary" :disabled="busy === 'default-filters'" @click="saveDefaultFilters">保存默认范围</button></div>
         </div>
       </template>
 

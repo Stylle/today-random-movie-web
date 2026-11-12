@@ -6,6 +6,7 @@ const props = defineProps({
   options: { type: Object, default: () => ({ libraries: [], genres: [], years: [], countries: [] }) },
   compact: Boolean,
   excludeWatchedDefault: { type: Boolean, default: true },
+  resetValue: { type: Object, default: null },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -21,6 +22,7 @@ function toggleLibrary(id) {
   patch('libraries', current.includes(id) ? current.filter(value => value !== id) : [...current, id])
 }
 function reset() {
+  if (props.resetValue) { emit('update:modelValue', JSON.parse(JSON.stringify(props.resetValue))); return }
   emit('update:modelValue', { libraries: [], genre: '', country: '', yearFrom: '', yearTo: '', excludeWatched: props.excludeWatchedDefault })
 }
 </script>

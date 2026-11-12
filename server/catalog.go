@@ -297,7 +297,7 @@ func secureIndex(length int) int {
 	return int(n.Int64())
 }
 
-func (a *App) pickMovie(filters Filters, source, scheduleID string) (Movie, error) {
+func (a *App) chooseMovie(filters Filters) (Movie, error) {
 	candidates := a.candidates(filters)
 	if len(candidates) == 0 {
 		return Movie{}, fmt.Errorf("当前筛选条件下没有影片")
@@ -316,12 +316,24 @@ func (a *App) pickMovie(filters Filters, source, scheduleID string) (Movie, erro
 		candidates = fresh
 	}
 	movie := candidates[secureIndex(len(candidates))]
+	return movie, nil
+}
+
+func (a *App) pickMovie(filters Filters, source, scheduleID string) (Movie, error) {
+	movie, err := a.chooseMovie(filters)
+	if err != nil {
+		return Movie{}, err
+	}
 	a.exec("INSERT INTO random_history(movie_id,source,schedule_id,created_at) VALUES(?,?,?,?)", movie.ID, source, scheduleID, nowISO())
 	a.exec("DELETE FROM random_history WHERE id NOT IN (SELECT id FROM random_history ORDER BY id DESC LIMIT 1000)")
 	return movie, nil
 }
 
 func (a *App) movieOptions(w http.ResponseWriter) {
+	respond(w, a.movieOptionsData())
+}
+
+func (a *App) movieOptionsData() M {
 	libraries := []M{}
 	for _, row := range a.rows("SELECT library_id,library,COUNT(*) AS count FROM movies GROUP BY library_id,library ORDER BY library") {
 		libraries = append(libraries, M{"id": row["library_id"], "name": row["library"], "count": row["count"]})
@@ -338,7 +350,7 @@ func (a *App) movieOptions(w http.ResponseWriter) {
 	genreList, yearList := mapKeys(genres), mapKeys(years)
 	sort.Strings(genreList)
 	sort.Sort(sort.Reverse(sort.StringSlice(yearList)))
-	respond(w, M{"libraries": libraries, "genres": genreList, "years": yearList, "countries": []string{"华语", "美国", "欧洲", "韩国", "日本", "印度", "其他地区"}})
+	return M{"libraries": libraries, "genres": genreList, "years": yearList, "countries": []string{"华语", "美国", "欧洲", "韩国", "日本", "印度", "其他地区"}}
 }
 
 func mapKeys(value map[string]bool) []string {
@@ -388,7 +400,11 @@ func (a *App) listMovies(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) randomMovieRoute(w http.ResponseWriter, r *http.Request) {
 	v := readBody(r)
-	movie, err := a.pickMovie(parseFilters(v["filters"]), "manual", "")
+	filters := a.defaultFilters()
+	if v["filters"] != nil {
+		filters = parseFilters(v["filters"])
+	}
+	movie, err := a.pickMovie(filters, "manual", "")
 	if err != nil {
 		fail(404, err.Error())
 	}

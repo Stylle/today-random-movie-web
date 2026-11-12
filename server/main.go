@@ -30,22 +30,31 @@ type syncState struct {
 }
 
 type App struct {
-	db        *sql.DB
-	dataDir   string
-	webDir    string
-	secret    []byte
-	writeMu   sync.Mutex
-	fnMu      sync.Mutex
-	fnClient  *FnOSClient
-	posterMu  sync.Mutex
-	syncMu    sync.Mutex
-	syncState syncState
-	stop      chan struct{}
+	db         *sql.DB
+	dataDir    string
+	webDir     string
+	secret     []byte
+	writeMu    sync.Mutex
+	fnMu       sync.Mutex
+	fnClient   *FnOSClient
+	posterMu   sync.Mutex
+	syncMu     sync.Mutex
+	syncState  syncState
+	stop       chan struct{}
+	tgConfigMu sync.Mutex
+	tgMu       sync.Mutex
+	tgCancel   context.CancelFunc
+	tgWake     chan struct{}
+	tgHTTP     *http.Client
+	tgBase     string // Fixed official endpoint; isolated tests may override it.
 }
 
 func newApp(dataDir, webDir string) *App {
 	must(os.MkdirAll(filepath.Join(dataDir, "posters"), 0750))
 	a := &App{dataDir: dataDir, webDir: webDir, secret: loadSecret(dataDir), stop: make(chan struct{})}
+	a.tgWake = make(chan struct{}, 1)
+	a.tgHTTP = &http.Client{Timeout: 70 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	a.tgBase = "https://api.telegram.org"
 	a.db = openDB(filepath.Join(dataDir, "app.db"))
 	must(a.ensureInitialAdmin())
 	return a
@@ -133,6 +142,9 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	case p == "/api/movies/options" && r.Method == http.MethodGet:
 		a.require(r)
 		a.movieOptions(w)
+	case p == "/api/random/defaults" && r.Method == http.MethodGet:
+		a.require(r)
+		respond(w, M{"filters": a.defaultFilters()})
 	case p == "/api/movies" && r.Method == http.MethodGet:
 		a.require(r)
 		a.listMovies(w, r)
@@ -153,7 +165,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const version = "0.4.0"
+const version = "0.5.1"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
@@ -184,6 +196,10 @@ func main() {
 	}
 	stop, done := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer done()
+	var telegram sync.WaitGroup
+	telegram.Add(1)
+	go func() { defer telegram.Done(); a.telegramLoop(stop) }()
+	defer func() { done(); telegram.Wait() }()
 	go func() {
 		<-stop.Done()
 		close(a.stop)

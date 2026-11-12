@@ -1,6 +1,6 @@
 services:
   movie:
-    # 固定版本可改成 v0.4.0。
+    # 固定版本可改成 v0.5.1。
     image: stylle/today-random-movie-web:latest
     container_name: today-random-movie
     restart: always

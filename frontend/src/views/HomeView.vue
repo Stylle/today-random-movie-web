@@ -6,6 +6,7 @@ import FilterPanel from '../components/FilterPanel.vue'
 
 const options = ref({ libraries: [], genres: [], years: [], countries: [] })
 const filters = ref({ libraries: [], genre: '', country: '', yearFrom: '', yearTo: '', excludeWatched: true })
+const defaultFilters = ref(null)
 const movie = ref(null)
 const history = ref([])
 const cursor = ref(-1)
@@ -49,7 +50,10 @@ async function play() {
 
 onMounted(async () => {
   try {
-    options.value = await api('/api/movies/options')
+    const [opts, defaults] = await Promise.all([api('/api/movies/options'), api('/api/random/defaults')])
+    options.value = opts
+    filters.value = defaults.filters
+    defaultFilters.value = JSON.parse(JSON.stringify(defaults.filters))
     const available = options.value.libraries.reduce((sum, item) => sum + Number(item.count || 0), 0)
     if (available > 0) await pick()
   } catch (e) { error.value = e.message }
@@ -64,7 +68,7 @@ onMounted(async () => {
     </section>
 
     <div class="picker-layout">
-      <FilterPanel v-model="filters" :options="options" />
+      <FilterPanel v-model="filters" :options="options" :reset-value="defaultFilters" />
 
       <section class="movie-stage" :class="{ empty: !movie }">
         <template v-if="movie">

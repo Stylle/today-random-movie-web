@@ -79,3 +79,21 @@ CREATE TABLE IF NOT EXISTS webhook_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_webhook_logs_created ON webhook_logs(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS telegram_movie_config (
+    id INTEGER PRIMARY KEY CHECK(id=1), value TEXT NOT NULL, revision TEXT NOT NULL,
+    next_update INTEGER NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT '', last_received TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS telegram_movie_chat (
+    chat_id TEXT PRIMARY KEY, filters_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS telegram_movie_buttons (
+    token TEXT PRIMARY KEY, chat_id TEXT NOT NULL, revision TEXT NOT NULL,
+    action TEXT NOT NULL, payload TEXT NOT NULL, expires INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS telegram_button_expiry ON telegram_movie_buttons(expires);
+CREATE TABLE IF NOT EXISTS telegram_movie_updates (
+    bot TEXT NOT NULL, update_id INTEGER NOT NULL, revision TEXT NOT NULL,
+    payload TEXT NOT NULL, movie_id TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL,
+    PRIMARY KEY(bot,update_id)
+);

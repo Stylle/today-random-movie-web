@@ -7,6 +7,7 @@
 - 飞牛连接、同步和封面缓存
 - 随机选片、筛选和影片库
 - Webhook
+- Telegram 机器人：`getmovie` 随机，`meau` / `menu` 打开分类、年份与观看范围菜单
 - 每日、每周、每月自动推送
 - 每日或每周自动同步新影片与已观看状态
 - 运行记录
@@ -16,7 +17,7 @@
 ```yaml
 services:
   movie:
-    image: stylle/today-random-movie-web:v0.4.0
+    image: stylle/today-random-movie-web:v0.5.1
     container_name: today-random-movie
     restart: always
     environment:
@@ -40,6 +41,16 @@ docker compose up -d
 访问 `http://NAS-IP:8080`，登录后在“管理设置”中保存飞牛连接并同步。定时同步可在“连接与同步”页启用；年份筛选支持起止范围。
 
 无需 `.env`、setup-token 或域名变量。端口和数据挂载必须保留；不要把实际部署配置、密码或数据库上传 Git。
+
+## Telegram 选片
+
+管理设置 → Telegram 机器人：填写独立的 Bot Token，向自己的机器人发送 `/start`，再点击「检测连接 / 识别私聊 ID」。核对私聊 ID 后启用并保存；默认关闭，无需新增环境变量或公网回调。
+
+- `getmovie` / `/getmovie`：按当前范围随机影片，返回摘要及可用的飞牛播放链接。
+- `meau` / `menu` / `/menu`：打开按钮菜单，设置媒体库（多选）、类型、地区、起止年份和排除已观看；支持分页。
+- 初始为全部分类、排除已观看。后台「默认随机范围」供网站、TG 默认模式和新建推送规则共用；TG 自定义范围单独保存，点击「恢复后台默认」重新跟随，已有推送规则不受影响。
+
+只响应绑定的私聊，不开放给其他用户或群聊。请勿与随手传等应用共用同一个机器人 Token；一个机器人只能由一个实例接收消息。Token 加密保存在 data，网页不回传已存 Token，留空表示不修改。消息和播放链接交给 Telegram 保存，机器人聊天不是端到端加密；播放仍需设备能访问飞牛并登录。
 
 [部署与故障排查](docs/guide.md) · [镜像版 Compose](docker-compose.hub.yml) · [发布说明](docs/release.md)
 
