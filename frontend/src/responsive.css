@@ -9,3 +9,5 @@
  .movie-workspace-header>strong{font-size:14px}
  :root[data-app-id=movie] .movie-workspace-header .theme-switch button{width:30px;min-width:30px;min-height:34px;padding:4px}
 }
+
+@media(max-width:1000px){.movie-sidebar>.brand{margin-top:4px}}

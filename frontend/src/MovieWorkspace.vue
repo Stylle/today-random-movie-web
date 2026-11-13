@@ -63,7 +63,6 @@ onUnmounted(() => { window.removeEventListener('hashchange', syncRoute); window.
       <button v-if="navOpen" class="movie-nav-backdrop" @click="navOpen = false" :aria-label="t('关闭导航')"></button>
       <aside id="movie-navigation" class="movie-sidebar" :aria-label="t('主导航')">
         <a class="brand" href="#/today"><img src="/logo.svg" alt="" /><span class="brand-copy"><b>{{ store.config.siteTitle }}</b><small>{{ t('今天，就看这一部') }}</small></span></a>
-        <button class="movie-nav-close icon-btn" @click="navOpen = false" :aria-label="t('关闭导航')">×</button>
         <nav aria-label="主导航" @click="navOpen = false">
           <a href="#/today" :class="{ active: route === 'today' }" :aria-current="route === 'today' ? 'page' : undefined"><UiIcon name="releases" />{{ t('今日想看') }}</a>
           <a href="#/library" :class="{ active: route === 'library' }" :aria-current="route === 'library' ? 'page' : undefined"><UiIcon name="files" />{{ t('影片库') }}</a>
