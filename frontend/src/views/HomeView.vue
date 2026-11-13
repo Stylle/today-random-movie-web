@@ -63,8 +63,8 @@ onMounted(async () => {
 <template>
   <div class="home-view">
     <section class="intro-row">
-      <div><span class="eyebrow">TONIGHT'S PICK</span><h1>别再翻了，<em>今晚看这部。</em></h1><p>从你的飞牛媒体库里，按偏好认真地随机一次。</p></div>
-      <div class="catalog-stat"><strong>{{ store.config.movieCount || 0 }}</strong><span>部影片已就绪</span></div>
+      <div><span class="eyebrow">TONIGHT'S PICK</span><h1>今日想看</h1><p>按偏好随机挑选，或在影片库中搜索。</p></div>
+      <a class="button-link ghost" href="#/library">搜索影片</a><div class="catalog-stat"><strong>{{ store.config.movieCount || 0 }}</strong><span>部影片已就绪</span></div>
     </section>
 
     <div class="picker-layout">

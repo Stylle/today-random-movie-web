@@ -212,7 +212,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
             <label class="field"><span>密码</span><input v-model="settings.fnPassword" type="password" :placeholder="settings.fnHasPassword ? '已保存；留空不修改' : '飞牛密码'" autocomplete="new-password" /></label>
           </div>
           <label class="check-row warning-check"><input v-model="settings.fnInsecureTls" type="checkbox" /><span>允许自签名 HTTPS 证书（仅可信内网 NAS）</span></label>
-          <div class="action-row"><button class="primary" :disabled="busy === 'fn'" @click="saveFn">{{ busy === 'fn' ? '保存中…' : '保存连接' }}</button><button class="ghost" :disabled="busy === 'test'" @click="testFn">{{ busy === 'test' ? '测试中…' : '测试连接' }}</button></div>
+          <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'fn'" @click="saveFn">{{ busy === 'fn' ? '保存中…' : '保存连接' }}</button><button class="ghost" :disabled="busy === 'test'" @click="testFn">{{ busy === 'test' ? '测试中…' : '测试连接' }}</button></div>
         </div>
         <div class="panel sync-panel">
           <div><h3>媒体库索引</h3><p>读取飞牛影片信息；封面在访问时缓存到 data/posters。</p><small v-if="settings.lastSyncAt">上次同步：{{ new Date(settings.lastSyncAt).toLocaleString() }}</small></div>
@@ -231,7 +231,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
           </div>
           <label class="check-row"><input v-model="syncSchedule.enabled" type="checkbox" /><span>启用定时同步</span></label>
           <small v-if="syncSchedule.lastRunAt" class="schedule-last-run">上次自动触发：{{ new Date(syncSchedule.lastRunAt).toLocaleString() }}</small>
-          <div class="action-row"><button class="primary" :disabled="busy === 'sync-schedule'" @click="saveSyncSchedule">{{ busy === 'sync-schedule' ? '保存中…' : '保存同步规则' }}</button></div>
+          <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'sync-schedule'" @click="saveSyncSchedule">{{ busy === 'sync-schedule' ? '保存中…' : '保存同步规则' }}</button></div>
         </div>
       </template>
 
@@ -245,7 +245,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
             <label class="field span-2"><span>自定义请求头（JSON）</span><textarea v-model="webhook.headers" rows="3" placeholder='{"Authorization":"Bearer ..."}'></textarea></label>
             <label class="field span-2"><span>正文模板（留空使用内置格式）</span><textarea v-model="webhook.bodyTemplate" rows="8" :placeholder="webhookPlaceholder"></textarea><small v-pre>变量：{{title}} {{text}} {{movie}} {{year}} {{genres}} {{rating}} {{fields}}</small></label>
           </div>
-          <div class="action-row"><button class="primary" :disabled="busy === 'webhook'" @click="saveWebhook">{{ busy === 'webhook' ? '保存中…' : '保存 Webhook' }}</button><button class="ghost" :disabled="busy === 'webhook-test' || !webhook.url" @click="testWebhook">{{ busy === 'webhook-test' ? '发送中…' : '发送测试' }}</button></div>
+          <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'webhook'" @click="saveWebhook">{{ busy === 'webhook' ? '保存中…' : '保存 Webhook' }}</button><button class="ghost" :disabled="busy === 'webhook-test' || !webhook.url" @click="testWebhook">{{ busy === 'webhook-test' ? '发送中…' : '发送测试' }}</button></div>
         </div>
       </template>
 
@@ -258,7 +258,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
             <label class="field"><span>允许的私聊 Chat ID</span><input v-model="telegram.chatId" inputmode="numeric" placeholder="先私聊机器人发送 /start，再检测" /></label>
             <label v-if="telegramChats.length" class="field"><span>检测到的私聊</span><select v-model="telegram.chatId"><option value="">请核对选择</option><option v-for="id in telegramChats" :key="id" :value="id">{{ id }}</option></select></label>
           </div>
-          <div class="action-row"><button class="primary" :disabled="busy === 'telegram'" @click="saveTelegram">{{ busy === 'telegram' ? '保存中…' : '保存机器人设置' }}</button><button class="ghost" :disabled="busy === 'telegram-test'" @click="testTelegram">检测连接 / 识别私聊 ID</button><button class="ghost" :disabled="busy === 'telegram-send-test' || !telegramLive" @click="sendTelegramTest">发送测试通知</button></div>
+          <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'telegram'" @click="saveTelegram">{{ busy === 'telegram' ? '保存中…' : '保存机器人设置' }}</button><button class="ghost" :disabled="busy === 'telegram-test'" @click="testTelegram">检测连接 / 识别私聊 ID</button><button class="ghost" :disabled="busy === 'telegram-send-test' || !telegramLive" @click="sendTelegramTest">发送测试通知</button></div>
           <p v-if="telegramNotice" class="muted">{{ telegramNotice }}</p>
           <p class="muted">{{ telegramLive ? '已启用' : '已关闭' }} · TG 范围：{{ telegram.customRange ? '自定义（在机器人菜单中恢复默认）' : '跟随后台默认' }}<span v-if="telegram.lastReceived"> · 最近处理 {{ new Date(telegram.lastReceived).toLocaleString() }}</span></p>
           <p v-if="telegram.lastError" class="inline-error">{{ telegram.lastError }}</p>
@@ -267,7 +267,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
         <div class="panel">
           <h3>默认随机范围</h3><p class="muted">网站首次进入、TG 默认范围和新建推送规则共用此设置；初始为全部分类、排除已观看。TG 菜单自定义不会修改这里，已有推送规则也不会被覆盖。</p>
           <FilterPanel v-model="defaultFilters" :options="options" compact />
-          <div class="action-row"><button class="primary" :disabled="busy === 'default-filters'" @click="saveDefaultFilters">保存默认范围</button></div>
+          <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'default-filters'" @click="saveDefaultFilters">保存默认范围</button></div>
         </div>
       </template>
 
@@ -291,14 +291,14 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
           <p v-if="scheduleForm.notifyChannel !== 'webhook' && !telegramLive" class="inline-error">机器人尚未启用。可以先保存规则，但运行前请配置并启用 Telegram 机器人。</p>
           <label class="check-row"><input v-model="scheduleForm.enabled" type="checkbox" /><span>启用这条规则</span></label>
           <FilterPanel v-model="scheduleForm.filters" :options="options" compact />
-          <div class="action-row"><button class="primary" :disabled="busy === 'schedule'" @click="saveRule">{{ busy === 'schedule' ? '保存中…' : editing ? '保存修改' : '创建规则' }}</button><button v-if="editing" class="ghost" @click="editRule()">取消编辑</button></div>
+          <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'schedule'" @click="saveRule">{{ busy === 'schedule' ? '保存中…' : editing ? '保存修改' : '创建规则' }}</button><button v-if="editing" class="ghost" @click="editRule()">取消编辑</button></div>
         </div>
       </template>
 
       <template v-if="tab === 'history'">
         <div class="section-title"><div><span class="eyebrow">AUDIT TRAIL</span><h1>运行记录</h1><p>最近 100 条随机与通知结果；双渠道分别记录，部分失败请核对后再运行。</p></div><button class="ghost compact" @click="refreshHistory">刷新</button></div>
-        <div class="panel"><h3>最近选片</h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>影片</th><th>来源</th></tr></thead><tbody><tr v-for="row in history.random" :key="row.id"><td>{{ new Date(row.created_at).toLocaleString() }}</td><td>{{ row.title }} <small>{{ row.year }}</small></td><td>{{ row.source }}</td></tr></tbody></table></div></div>
-        <div class="panel"><h3>通知记录</h3><div class="table-wrap"><table><thead><tr><th>时间</th><th>渠道</th><th>事件 / 规则</th><th>状态</th><th>错误</th></tr></thead><tbody><tr v-for="row in (history.notifications || history.webhooks)" :key="row.id"><td>{{ new Date(row.created_at).toLocaleString() }}</td><td>{{ channelLabel(row.channel) }}</td><td>{{ row.event === 'test' ? '测试通知' : row.event === 'movie_pick' ? '影片推荐' : row.event }}<small v-if="row.schedule_id"> · {{ row.rule_name || row.schedule_id }}</small></td><td><span :class="row.ok ? 'ok-text' : 'danger-text'">{{ row.ok ? (row.channel === 'telegram' ? '已发送' : `HTTP ${row.status_code}`) : '失败' }}</span></td><td>{{ row.error }}</td></tr></tbody></table></div></div>
+        <div class="panel"><h3>最近选片</h3><div class="table-wrap mobile-records"><table><thead><tr><th>时间</th><th>影片</th><th>来源</th></tr></thead><tbody><tr v-for="row in history.random" :key="row.id"><td data-label="时间">{{ new Date(row.created_at).toLocaleString() }}</td><td data-label="影片">{{ row.title }} <small>{{ row.year }}</small></td><td data-label="来源">{{ row.source }}</td></tr></tbody></table></div></div>
+        <div class="panel"><h3>通知记录</h3><div class="table-wrap mobile-records"><table><thead><tr><th>时间</th><th>渠道</th><th>事件 / 规则</th><th>状态</th><th>错误</th></tr></thead><tbody><tr v-for="row in (history.notifications || history.webhooks)" :key="row.id"><td data-label="时间">{{ new Date(row.created_at).toLocaleString() }}</td><td data-label="渠道">{{ channelLabel(row.channel) }}</td><td data-label="事件 / 规则">{{ row.event === 'test' ? '测试通知' : row.event === 'movie_pick' ? '影片推荐' : row.event }}<small v-if="row.schedule_id"> · {{ row.rule_name || row.schedule_id }}</small></td><td data-label="状态"><span :class="row.ok ? 'ok-text' : 'danger-text'">{{ row.ok ? (row.channel === 'telegram' ? '已发送' : `HTTP ${row.status_code}`) : '失败' }}</span></td><td data-label="错误">{{ row.error }}</td></tr></tbody></table></div></div>
       </template>
     </section>
     <div v-if="message" class="toast" :class="{ bad }">{{ message }}</div>

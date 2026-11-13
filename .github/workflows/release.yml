@@ -2,6 +2,7 @@ name: Release container
 
 on:
   push:
+    branches: ["main"]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -26,6 +27,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
         working-directory: frontend
+      - run: node --test tests/appearance.test.cjs
       - run: npm run build
         working-directory: frontend
       - uses: docker/setup-buildx-action@v3
@@ -40,13 +42,15 @@ jobs:
           docker run -d --name movie-test -e USER=admin -e PASSWORD=test-only-password -p 127.0.0.1:28181:8080 -v movie-test-data:/data movie:test
           trap 'docker logs movie-test; docker rm -f movie-test; docker volume rm movie-test-data' EXIT
           for n in $(seq 1 30); do curl -fsS http://127.0.0.1:28181/api/health && break || sleep 1; done
-          curl -fsS http://127.0.0.1:28181/api/health | grep '0.5.3'
+          curl -fsS http://127.0.0.1:28181/api/health | grep '0.6.0'
+          test "$(docker exec movie-test awk '/^Uid:/ {print $2}' /proc/1/status)" = 10001
           docker restart movie-test
           for n in $(seq 1 30); do curl -fsS http://127.0.0.1:28181/api/health && break || sleep 1; done
-          curl -fsS http://127.0.0.1:28181/api/health | grep '0.5.3'
+          curl -fsS http://127.0.0.1:28181/api/health | grep '0.6.0'
 
   publish:
     needs: test
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

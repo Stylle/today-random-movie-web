@@ -5,12 +5,11 @@ import HomeView from './views/HomeView.vue'
 import LibraryView from './views/LibraryView.vue'
 import LoginView from './views/LoginView.vue'
 import AdminView from './views/AdminView.vue'
+import AppearanceControls from './components/AppearanceControls.vue'
 
 const routes = { today: HomeView, library: LibraryView, login: LoginView, admin: AdminView }
 const route = ref('today')
-const navOpen = ref(false)
 const menuOpen = ref(false)
-const theme = ref(localStorage.getItem('trm_theme') || 'system')
 const bootError = ref('')
 
 const component = computed(() => routes[route.value] || HomeView)
@@ -19,30 +18,16 @@ const routeProps = computed(() => ({ key: route.value }))
 function syncRoute() {
   const wanted = location.hash.replace(/^#\/?/, '') || 'today'
   route.value = store.authChecked && !store.user ? 'login' : routes[wanted] ? wanted : 'today'
-  navOpen.value = false
   menuOpen.value = false
 }
 
 function go(name) { location.hash = `#/${name}` }
 
-function applyTheme(value) {
-  theme.value = value
-  localStorage.setItem('trm_theme', value)
-  const dark = value === 'dark' || (value === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
-  document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-}
-
-function cycleTheme() {
-  applyTheme(theme.value === 'light' ? 'dark' : theme.value === 'dark' ? 'system' : 'light')
-}
-
 async function signOut() { await logout(); go('today') }
 
-const themeIcon = computed(() => theme.value === 'light' ? '☀' : theme.value === 'dark' ? '☾' : '◐')
 
 onMounted(async () => {
   syncRoute()
-  applyTheme(theme.value)
   window.addEventListener('hashchange', syncRoute)
   try { await Promise.all([loadConfig(), loadSession()]) } catch (error) { bootError.value = error.message }
   if (!store.user) go('login')
@@ -51,20 +36,22 @@ onUnmounted(() => window.removeEventListener('hashchange', syncRoute))
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" data-drawer-host>
     <header class="topbar">
       <a class="brand" href="#/today" aria-label="首页">
         <img src="/logo.svg" alt="" />
         <span class="brand-copy"><b>{{ store.config.siteTitle }}</b><small>今天，就看这一部</small></span>
       </a>
-      <button class="nav-toggle icon-btn" @click="navOpen = !navOpen" :aria-expanded="navOpen">{{ navOpen ? '×' : '☰' }}</button>
-      <nav :class="{ open: navOpen }">
+      <button class="drawer-toggle icon-btn" type="button" data-drawer-toggle aria-controls="movie-nav" aria-expanded="false" aria-label="展开导航">☰</button>
+      <button class="drawer-backdrop" type="button" data-drawer-close aria-label="关闭导航"></button>
+      <nav id="movie-nav" data-drawer aria-label="主导航">
+        <button class="drawer-close" type="button" data-drawer-close>关闭导航</button>
         <a v-if="store.user" href="#/today" :class="{ active: route === 'today' }">今日想看</a>
         <a v-if="store.user" href="#/library" :class="{ active: route === 'library' }">影片库</a>
         <a v-if="store.user" href="#/admin" :class="{ active: route === 'admin' }">管理设置</a>
       </nav>
       <div class="top-actions">
-        <button class="icon-btn" @click="cycleTheme" :title="`主题：${theme}`">{{ themeIcon }}</button>
+        <AppearanceControls />
         <div v-if="store.user" class="user-wrap">
           <button class="user-chip" @click="menuOpen = !menuOpen"><span>{{ store.user.username[0].toUpperCase() }}</span>{{ store.user.username }} ▾</button>
           <div class="user-menu" v-if="menuOpen">
@@ -78,6 +65,6 @@ onUnmounted(() => window.removeEventListener('hashchange', syncRoute))
 
     <div v-if="bootError" class="global-error">无法连接服务：{{ bootError }}</div>
     <main class="page-wrap"><component :is="component" v-bind="routeProps" /></main>
-    <footer>今日想看 · 飞牛媒体库随机选片器</footer>
+    <footer class="site-footer"><span>© 2026 Stylle · 今日想看 · MIT License</span><button type="button" data-about-open>关于与许可</button></footer>
   </div>
 </template>
