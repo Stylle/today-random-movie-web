@@ -199,6 +199,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
   <div v-if="!store.authChecked" class="loading-card">正在确认登录状态…</div>
   <div v-else-if="!store.user" class="empty-state standalone"><div class="empty-reel">◇</div><h2>这里需要管理员权限</h2><p>登录后才能连接飞牛和配置推送。</p><a href="#/login" class="button-link primary">去登录</a></div>
   <div v-else class="admin-layout">
+    <label class="admin-section-picker"><span>管理栏目</span><select v-model="tab" aria-label="管理栏目"><option v-for="item in tabs" :key="item.id" :value="item.id">{{ item.label }}</option></select></label>
     <aside class="admin-nav"><div class="admin-nav-title"><span class="eyebrow">CONTROL ROOM</span><h2>管理设置</h2></div><button v-for="item in tabs" :key="item.id" :class="{ active: tab === item.id }" @click="tab = item.id"><span>{{ item.icon }}</span>{{ item.label }}</button></aside>
 
     <section class="admin-content" v-if="settings">
