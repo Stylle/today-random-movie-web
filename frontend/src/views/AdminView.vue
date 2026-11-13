@@ -1,4 +1,5 @@
 <script setup>
+import UiIcon from '../components/UiIcon.vue';
 import { t } from "./../i18n";
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { api, jsonBody } from '../api.js'
@@ -201,7 +202,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
   <div v-else-if="!store.user" class="empty-state standalone"><div class="empty-reel">◇</div><h2>{{ t('这里需要管理员权限') }}</h2><p>{{ t('登录后才能连接飞牛和配置推送。') }}</p><a href="#/login" class="button-link primary">{{ t('去登录') }}</a></div>
   <div v-else class="admin-layout">
     <label class="admin-section-picker"><span>{{ t('管理栏目') }}</span><select v-model="tab" :aria-label="t('管理栏目')"><option v-for="item in tabs" :key="item.id" :value="item.id">{{ t(item.label) }}</option></select></label>
-    <aside class="admin-nav"><div class="admin-nav-title"><span class="eyebrow">CONTROL ROOM</span><h2>{{ t('管理设置') }}</h2></div><button v-for="item in tabs" :key="item.id" :class="{ active: tab === item.id }" @click="tab = item.id"><span>{{ item.icon }}</span>{{ t(item.label) }}</button></aside>
+    <aside class="admin-nav"><div class="admin-nav-title"><span class="eyebrow">CONTROL ROOM</span><h2>{{ t('管理设置') }}</h2></div><button v-for="item in tabs" :key="item.id" :class="{ active: tab === item.id }" @click="tab = item.id"><span class="nav-icon"><UiIcon :name="item.id" /></span>{{ t(item.label) }}</button></aside>
 
     <section class="admin-content" v-if="settings">
       <template v-if="tab === 'connection'">
