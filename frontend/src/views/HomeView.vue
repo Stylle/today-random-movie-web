@@ -1,4 +1,5 @@
 <script setup>
+import { t } from "./../i18n";
 import { computed, onMounted, ref } from 'vue'
 import { api, jsonBody } from '../api.js'
 import { store } from '../store.js'
@@ -63,8 +64,8 @@ onMounted(async () => {
 <template>
   <div class="home-view">
     <section class="intro-row">
-      <div><span class="eyebrow">TONIGHT'S PICK</span><h1>今日想看</h1><p>按偏好随机挑选，或在影片库中搜索。</p></div>
-      <a class="button-link ghost" href="#/library">搜索影片</a><div class="catalog-stat"><strong>{{ store.config.movieCount || 0 }}</strong><span>部影片已就绪</span></div>
+      <div><span class="eyebrow">TONIGHT'S PICK</span><h1>{{ t('今日想看') }}</h1><p>{{ t('按偏好随机挑选，或在影片库中搜索。') }}</p></div>
+      <a class="button-link ghost" href="#/library">{{ t('搜索影片') }}</a><div class="catalog-stat"><strong>{{ store.config.movieCount || 0 }}</strong><span>{{ t('部影片已就绪') }}</span></div>
     </section>
 
     <div class="picker-layout">
@@ -72,28 +73,28 @@ onMounted(async () => {
 
       <section class="movie-stage" :class="{ empty: !movie }">
         <template v-if="movie">
-          <div class="poster-wrap"><img :src="movie.posterUrl" :alt="movie.title" /><span v-if="movie.watched" class="watched-badge">已看过</span></div>
+          <div class="poster-wrap"><img :src="movie.posterUrl" :alt="movie.title" /><span v-if="movie.watched" class="watched-badge">{{ t('已看过') }}</span></div>
           <div class="movie-copy">
             <span class="pick-label">TODAY'S MOVIE</span>
             <h2>{{ movie.title }}</h2>
             <p class="movie-meta">{{ metadata }}</p>
             <div class="tags"><span v-for="tag in movie.genres" :key="tag">{{ tag }}</span><span v-if="movie.rating" class="rating">★ {{ movie.rating }}</span></div>
-            <p class="overview">{{ movie.overview || '飞牛暂未提供这部影片的简介。或许，未知正是今晚最好的开场。' }}</p>
+            <p class="overview">{{ movie.overview || t('飞牛暂未提供这部影片的简介。或许，未知正是今晚最好的开场。') }}</p>
             <div class="hero-actions">
-              <button class="primary large" @click="play">▶ 开始播放</button>
-              <button class="ghost large" :disabled="busy" @click="pick">{{ busy ? '正在挑选…' : '↻ 换一部' }}</button>
-              <button class="icon-btn history-btn" :disabled="cursor <= 0" @click="previous" title="上一部">←</button>
+              <button class="primary large" @click="play">{{ t('▶ 开始播放') }}</button>
+              <button class="ghost large" :disabled="busy" @click="pick">{{ busy ? t('正在挑选…') : t('↻ 换一部') }}</button>
+              <button class="icon-btn history-btn" :disabled="cursor <= 0" @click="previous" :title="t('上一部')">←</button>
             </div>
-            <button class="text-btn detail-link" @click="detailOpen = !detailOpen">{{ detailOpen ? '收起详情' : '查看完整信息' }}</button>
-            <div v-if="detailOpen" class="detail-box"><b>媒体库</b><span>{{ movie.library }}</span><b>地区</b><span>{{ movie.countries?.join(' / ') || '未知' }}</span></div>
+            <button class="text-btn detail-link" @click="detailOpen = !detailOpen">{{ detailOpen ? t('收起详情') : t('查看完整信息') }}</button>
+            <div v-if="detailOpen" class="detail-box"><b>{{ t('媒体库') }}</b><span>{{ movie.library }}</span><b>{{ t('地区') }}</b><span>{{ movie.countries?.join(' / ') || t('未知') }}</span></div>
           </div>
         </template>
         <div v-else class="empty-state">
           <div class="empty-reel">▶</div>
-          <h2>媒体库还没有准备好</h2>
-          <p v-if="store.user">前往管理设置连接飞牛，然后执行第一次同步。</p>
-          <p v-else>管理员完成飞牛连接与同步后，这里就会出现今晚的影片。</p>
-          <a v-if="store.user" href="#/admin" class="button-link primary">去连接飞牛</a>
+          <h2>{{ t('媒体库还没有准备好') }}</h2>
+          <p v-if="store.user">{{ t('前往管理设置连接飞牛，然后执行第一次同步。') }}</p>
+          <p v-else>{{ t('管理员完成飞牛连接与同步后，这里就会出现今晚的影片。') }}</p>
+          <a v-if="store.user" href="#/admin" class="button-link primary">{{ t('去连接飞牛') }}</a>
         </div>
       </section>
     </div>

@@ -1,4 +1,5 @@
 <script setup>
+import { t } from "./../i18n";
 import { onMounted, ref, watch } from 'vue'
 import { api } from '../api.js'
 import FilterPanel from '../components/FilterPanel.vue'
@@ -33,9 +34,9 @@ onMounted(async () => { try { options.value = await api('/api/movies/options'); 
 
 <template>
   <div>
-    <section class="page-heading"><div><span class="eyebrow">YOUR LIBRARY</span><h1>影片库</h1><p>所有影片都来自最近一次飞牛同步。</p></div><label class="search-box">⌕<input v-model="query" placeholder="搜索片名…" /></label></section>
+    <section class="page-heading"><div><span class="eyebrow">YOUR LIBRARY</span><h1>{{ t('影片库') }}</h1><p>{{ t('所有影片都来自最近一次飞牛同步。') }}</p></div><label class="search-box">⌕<input v-model="query" :placeholder="t('搜索片名…')" /></label></section>
     <FilterPanel v-model="filters" :options="options" :exclude-watched-default="false" compact />
-    <div class="result-line"><span>共 {{ total }} 部影片</span><span v-if="busy">正在载入…</span></div>
+    <div class="result-line"><span>{{ t('共') }} {{ total }} {{ t('部影片') }}</span><span v-if="busy">{{ t('正在载入…') }}</span></div>
     <div class="movie-grid">
       <button class="movie-card" v-for="item in items" :key="item.id" @click="selected = item">
         <div class="card-poster"><img :src="item.posterUrl" loading="lazy" :alt="item.title" /><span v-if="item.rating">★ {{ item.rating }}</span></div>
@@ -43,10 +44,10 @@ onMounted(async () => { try { options.value = await api('/api/movies/options'); 
       </button>
     </div>
     <p class="inline-error" v-if="error">{{ error }}</p>
-    <div class="pagination" v-if="total > 30"><button class="ghost" :disabled="page <= 1" @click="page--">上一页</button><span>{{ page }} / {{ Math.ceil(total / 30) }}</span><button class="ghost" :disabled="page >= Math.ceil(total / 30)" @click="page++">下一页</button></div>
+    <div class="pagination" v-if="total > 30"><button class="ghost" :disabled="page <= 1" @click="page--">{{ t('上一页') }}</button><span>{{ page }} / {{ Math.ceil(total / 30) }}</span><button class="ghost" :disabled="page >= Math.ceil(total / 30)" @click="page++">{{ t('下一页') }}</button></div>
 
     <div class="modal-layer" v-if="selected" @click.self="selected = null">
-      <article class="movie-modal"><button class="modal-close" @click="selected = null">×</button><img :src="selected.posterUrl" :alt="selected.title" /><div><span class="eyebrow">MOVIE DETAILS</span><h2>{{ selected.title }}</h2><p class="movie-meta">{{ [selected.year, selected.library, selected.duration].filter(Boolean).join(' · ') }}</p><div class="tags"><span v-for="tag in selected.genres" :key="tag">{{ tag }}</span></div><p class="overview">{{ selected.overview || '暂无简介。' }}</p></div></article>
+      <article class="movie-modal"><button class="modal-close" @click="selected = null">×</button><img :src="selected.posterUrl" :alt="selected.title" /><div><span class="eyebrow">MOVIE DETAILS</span><h2>{{ selected.title }}</h2><p class="movie-meta">{{ [selected.year, selected.library, selected.duration].filter(Boolean).join(' · ') }}</p><div class="tags"><span v-for="tag in selected.genres" :key="tag">{{ tag }}</span></div><p class="overview">{{ selected.overview || t('暂无简介。') }}</p></div></article>
     </div>
   </div>
 </template>
