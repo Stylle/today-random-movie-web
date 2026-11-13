@@ -331,3 +331,25 @@ td small { color: var(--faint); }
   button.primary:hover, .button-link.primary:hover, .icon-btn:hover { transform: none; }
   .movie-card:hover img { transform: none; }
 }
+
+/* Movie UI refinement: one management entry, quiet navigation and full-width posters. */
+:root[data-app-id=movie] .app-shell .topbar nav{height:auto;gap:6px}
+:root[data-app-id=movie] .app-shell .topbar nav a{min-height:40px;padding:8px 14px;border:1px solid transparent;border-radius:9px;color:var(--text);background:transparent}
+:root[data-app-id=movie] .app-shell .topbar nav a:hover{background:var(--surface-hover)}
+:root[data-app-id=movie] .app-shell .topbar nav a.active{color:var(--text);background:var(--accent-soft);border-color:var(--border)}
+:root[data-app-id=movie] .app-shell .topbar nav a::after{display:none}
+.manage-entry{display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:40px}
+.home-view .picker-layout>.filter-panel{align-self:stretch}
+.poster-wrap{min-width:0}
+.movie-copy{min-width:0}
+.movie-copy h2,.movie-meta{overflow-wrap:anywhere}
+.poster-wrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+@media(max-width:760px){
+ :root[data-app-id=movie] .app-shell .topbar nav a{min-height:44px}
+ .home-view .picker-layout>.filter-panel{align-self:auto}
+}
+@media(max-width:520px){
+ .movie-stage{width:100%;min-width:0}
+ .poster-wrap{width:100%;max-width:none;max-height:none;aspect-ratio:2/3;min-height:0}
+ .poster-wrap img{width:100%;height:100%}
+}

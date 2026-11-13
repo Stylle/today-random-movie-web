@@ -7,6 +7,7 @@ import LibraryView from './views/LibraryView.vue'
 import LoginView from './views/LoginView.vue'
 import AdminView from './views/AdminView.vue'
 import AppearanceControls from './components/AppearanceControls.vue'
+import UiIcon from './components/UiIcon.vue'
 
 const routes = { today: HomeView, library: LibraryView, login: LoginView, admin: AdminView }
 const route = ref('today')
@@ -49,14 +50,13 @@ onUnmounted(() => window.removeEventListener('hashchange', syncRoute))
       <nav :class="{ open: navOpen }" :aria-label="t('主导航')">
         <a v-if="store.user" href="#/today" :class="{ active: route === 'today' }">{{ t('今日想看') }}</a>
         <a v-if="store.user" href="#/library" :class="{ active: route === 'library' }">{{ t('影片库') }}</a>
-        <a v-if="store.user" href="#/admin" :class="{ active: route === 'admin' }">{{ t('管理设置') }}</a>
       </nav>
       <div class="top-actions">
-        <AppearanceControls :show-about="!store.user" />
+        <AppearanceControls v-if="!store.user || route === 'admin'" :show-about="!store.user" />
+        <button v-if="store.user && route !== 'admin'" class="icon-btn manage-entry" @click="go('admin')" :aria-label="t('管理设置')" :title="t('管理设置')"><UiIcon name="settings" /></button>
         <div v-if="store.user" class="user-wrap">
           <button class="user-chip" @click="menuOpen = !menuOpen"><span>{{ store.user.username[0].toUpperCase() }}</span>{{ store.user.username }} ▾</button>
           <div class="user-menu" v-if="menuOpen">
-            <button @click="go('admin')">{{ t('管理设置') }}</button>
             <button type="button" data-about-open>{{ t('关于') }}</button>
             <button class="danger-text" @click="signOut">{{ t('退出登录') }}</button>
           </div>

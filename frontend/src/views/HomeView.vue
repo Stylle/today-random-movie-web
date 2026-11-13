@@ -65,7 +65,7 @@ onMounted(async () => {
   <div class="home-view">
     <section class="intro-row">
       <div><span class="eyebrow">TONIGHT'S PICK</span><h1>{{ t('今日想看') }}</h1><p>{{ t('按偏好随机挑选，或在影片库中搜索。') }}</p></div>
-      <a class="button-link ghost" href="#/library">{{ t('搜索影片') }}</a><div class="catalog-stat"><strong>{{ store.config.movieCount || 0 }}</strong><span>{{ t('部影片已就绪') }}</span></div>
+      <div class="catalog-stat"><strong>{{ store.config.movieCount || 0 }}</strong><span>{{ t('部影片已就绪') }}</span></div>
     </section>
 
     <div class="picker-layout">
@@ -78,7 +78,7 @@ onMounted(async () => {
             <span class="pick-label">TODAY'S MOVIE</span>
             <h2>{{ movie.title }}</h2>
             <p class="movie-meta">{{ metadata }}</p>
-            <div class="tags"><span v-for="tag in movie.genres" :key="tag">{{ tag }}</span><span v-if="movie.rating" class="rating">★ {{ movie.rating }}</span></div>
+            <div class="tags"><span v-for="tag in movie.genres" :key="tag">{{ tag }}</span><span v-if="movie.rating" class="rating">★ {{ Number(movie.rating).toFixed(1) }}</span></div>
             <p class="overview">{{ movie.overview || t('飞牛暂未提供这部影片的简介。或许，未知正是今晚最好的开场。') }}</p>
             <div class="hero-actions">
               <button class="primary large" @click="play">{{ t('▶ 开始播放') }}</button>
