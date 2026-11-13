@@ -65,7 +65,7 @@ onMounted(async () => {
   <div class="home-view">
     <section class="intro-row">
       <div><span class="eyebrow">TONIGHT'S PICK</span><h1>{{ t('今日想看') }}</h1><p>{{ t('按偏好随机挑选，或在影片库中搜索。') }}</p></div>
-      <div class="catalog-stat"><strong>{{ store.config.movieCount || 0 }}</strong><span>{{ t('部影片已就绪') }}</span></div>
+      <div v-if="store.config.movieCount > 0" class="catalog-stat"><strong>{{ store.config.movieCount }}</strong><span>{{ t('部影片已就绪') }}</span></div>
     </section>
 
     <div class="picker-layout">
