@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"net/http"
 	"os"
@@ -18,6 +19,8 @@ import (
 )
 
 type Filters struct {
+	RatingMin      *float64 `json:"ratingMin,omitempty"`
+	RatingMax      *float64 `json:"ratingMax,omitempty"`
 	Libraries      []string `json:"libraries"`
 	Genre          string   `json:"genre"`
 	Country        string   `json:"country"`
@@ -196,6 +199,25 @@ func parseFilters(value any) Filters {
 }
 
 func movieMatches(movie Movie, filters Filters) bool {
+	rating, err := strconv.ParseFloat(strings.TrimSpace(movie.Rating), 64)
+	// Missing, invalid and zero ratings represent unrated titles, not poor reviews.
+	if err != nil || math.IsNaN(rating) || math.IsInf(rating, 0) || rating <= 0 || rating > 10 {
+		rating = 10
+	}
+	low, high := 0.0, 10.0
+	if filters.RatingMin != nil {
+		low = *filters.RatingMin
+	}
+	if filters.RatingMax != nil {
+		high = *filters.RatingMax
+	}
+	if low > high {
+		low, high = high, low
+	}
+	if rating < low || rating > high {
+		return false
+	}
+
 	if len(filters.Libraries) > 0 {
 		found := false
 		for _, library := range filters.Libraries {
@@ -361,11 +383,18 @@ func mapKeys(value map[string]bool) []string {
 	return out
 }
 
+func queryRating(value string) *float64 {
+	n, err := strconv.ParseFloat(value, 64)
+	if err != nil || math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > 10 {
+		return nil
+	}
+	return &n
+}
 func filtersFromQuery(r *http.Request) Filters {
 	q := r.URL.Query()
 	return Filters{
 		Libraries: q["library"], Genre: q.Get("genre"), Country: q.Get("country"), Year: q.Get("year"),
-		YearFrom: q.Get("yearFrom"), YearTo: q.Get("yearTo"), ExcludeWatched: truth(q.Get("excludeWatched")),
+		RatingMin: queryRating(q.Get("ratingMin")), RatingMax: queryRating(q.Get("ratingMax")), YearFrom: q.Get("yearFrom"), YearTo: q.Get("yearTo"), ExcludeWatched: truth(q.Get("excludeWatched")),
 	}
 }
 

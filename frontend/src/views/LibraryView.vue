@@ -28,6 +28,7 @@ async function load() {
   error.value = ''
   busy.value = true
   const params = new URLSearchParams({ page: String(page.value), pageSize: String(pageSize.value), q: query.value, yearFrom: filters.value.yearFrom, yearTo: filters.value.yearTo, genre: filters.value.genre, country: filters.value.country, excludeWatched: String(filters.value.excludeWatched) })
+  for (const key of ['ratingMin', 'ratingMax']) { if (filters.value[key] != null) params.set(key, String(filters.value[key])) }
   filters.value.libraries.forEach(value => params.append('library', value))
   try {
     const result = await api('/api/movies?' + params, { signal: controller.signal })
@@ -39,7 +40,7 @@ async function load() {
 
 function measureGrid() {
   if (!grid.value) return
-  const columns = getComputedStyle(grid.value).gridTemplateColumns.split(' ').filter(Boolean).length
+  const columns = getComputedStyle(grid.value).gridTemplateColumns.trim().split(/\s+/).filter(Boolean).length
   const next = pageSizeForColumns(columns)
   if (next !== pageSize.value) pageSize.value = next
 }

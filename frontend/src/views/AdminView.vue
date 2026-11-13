@@ -13,7 +13,8 @@ const tabs = [
   { id: 'schedules', label: '自动推送', icon: '◷' },
   { id: 'history', label: '运行记录', icon: '≡' },
 ]
-const tab = ref('connection')
+const props = defineProps({ section: { type: String, default: 'connection' } })
+const tab = computed(() => props.section)
 const settings = ref(null)
 const webhook = ref({ url: '', method: 'POST', bodyType: 'json', headers: '', bodyTemplate: '' })
 const schedules = ref([])
@@ -201,8 +202,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
   <div v-if="!store.authChecked" class="loading-card">{{ t('正在确认登录状态…') }}</div>
   <div v-else-if="!store.user" class="empty-state standalone"><div class="empty-reel">◇</div><h2>{{ t('这里需要管理员权限') }}</h2><p>{{ t('登录后才能连接飞牛和配置推送。') }}</p><a href="#/login" class="button-link primary">{{ t('去登录') }}</a></div>
   <div v-else class="admin-layout">
-    <label class="admin-section-picker"><span>{{ t('管理栏目') }}</span><select v-model="tab" :aria-label="t('管理栏目')"><option v-for="item in tabs" :key="item.id" :value="item.id">{{ t(item.label) }}</option></select></label>
-    <aside class="admin-nav"><div class="admin-nav-title"><span class="eyebrow">CONTROL ROOM</span><h2>{{ t('管理设置') }}</h2></div><button v-for="item in tabs" :key="item.id" :class="{ active: tab === item.id }" @click="tab = item.id"><span class="nav-icon"><UiIcon :name="item.id" /></span>{{ t(item.label) }}</button></aside>
+
 
     <section class="admin-content" v-if="settings">
       <template v-if="tab === 'connection'">

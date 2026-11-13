@@ -1,0 +1,11 @@
+.movie-account{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;padding-top:16px;border-top:1px solid var(--border)}
+.movie-account strong{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+:root[data-app-id=movie] .movie-signout{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:8px 12px;margin:0;border:1px solid var(--border);line-height:1.25;text-align:center;white-space:nowrap;background:transparent;color:var(--muted)}
+.movie-workspace-header>strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.movie-workspace-header .top-actions{margin-left:auto;flex:0 0 auto}
+:root[data-app-id=movie] .movie-nav-backdrop{background:rgba(0,0,0,.42);border:0}
+@media(max-width:520px){
+ .movie-workspace .movie-workspace-header{padding:0 12px;gap:8px}
+ .movie-workspace-header>strong{font-size:14px}
+ :root[data-app-id=movie] .movie-workspace-header .theme-switch button{width:30px;min-width:30px;min-height:34px;padding:4px}
+}

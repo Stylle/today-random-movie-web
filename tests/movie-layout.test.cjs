@@ -23,10 +23,19 @@ test('library uses responsive page size, cancels obsolete requests and cleans ob
   assert.match(view, /observer\?\.disconnect/);
 });
 test('management and search entries are not duplicated across the header and home', () => {
-  const app = read('frontend/src/App.vue'), home = read('frontend/src/views/HomeView.vue');
-  assert.doesNotMatch(app, /href="#\/admin"/);
-  assert.match(app, /class="icon-btn manage-entry"/);
-  assert.match(app, /!store.user \|\| route === 'admin'/);
+  const app = read('frontend/src/MovieWorkspace.vue'), home = read('frontend/src/views/HomeView.vue');
+  assert.match(app, /movie-sidebar/);
+  assert.match(app, /href="#\/today"/);
+  assert.match(app, /href="#\/library"/);
+  assert.match(app, /data-about-open/);
+  assert.doesNotMatch(app, /manage-entry|user-menu/);
+  const header = app.match(/<header class="topbar movie-workspace-header">[\s\S]*?<\/header>/)[0];
+  assert.match(header, /AppearanceControls/);
+  assert.doesNotMatch(header, /退出登录|user-chip/);
+  const footer = app.match(/<div class="movie-sidebar-foot">[\s\S]*?<\/aside>/)[0];
+  assert.match(footer, /movie-signout/);
+  assert.match(footer, /退出登录/);
+  assert.doesNotMatch(footer, /AppearanceControls/);
   assert.doesNotMatch(home, /搜索影片/);
 });
 test('poster width, neutral nav selection and equal-height home panels are explicit', () => {

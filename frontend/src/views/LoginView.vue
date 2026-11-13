@@ -16,7 +16,7 @@ async function submit() {
   try {
     const payload = { username: username.value.trim(), password: password.value, remember: remember.value }
     await login(payload)
-    location.hash = '#/admin'
+    location.hash = '#/today'
   } catch (e) { message.value = e.message } finally { busy.value = false }
 }
 </script>
@@ -25,13 +25,13 @@ async function submit() {
   <div class="login-wrap">
     <section class="login-card">
       <div class="login-mark"><img src="/logo.svg" alt="" /><div><span class="eyebrow">WELCOME BACK</span><h1>{{ t('管理员登录') }}</h1></div></div>
-      <p>{{ t('账号由 Docker 的 USER、PASSWORD 在首次启动时创建。') }}</p>
+      <p>{{ t('登录后管理媒体库、选片偏好与通知。') }}</p>
       <label class="field"><span>{{ t('用户名') }}</span><input v-model="username" autocomplete="username" placeholder="admin" /></label>
-      <label class="field"><span>{{ t('密码') }}</span><input v-model="password" type="password" autocomplete="current-password" :placeholder="t('至少 12 位')" @keyup.enter="submit" /></label>
+      <label class="field"><span>{{ t('密码') }}</span><input v-model="password" type="password" autocomplete="current-password" :placeholder="t('请输入密码')" @keyup.enter="submit" /></label>
       <label class="remember"><input v-model="remember" type="checkbox" />{{ t('在这台设备上保持登录') }}</label>
       <button class="primary full" :disabled="busy" @click="submit">{{ busy ? t('请稍候…') : t('登录') }}</button>
       <p class="inline-error" v-if="message">{{ message }}</p>
-      <small class="security-note">{{ t('账号保存在 data/app.db，飞牛密码使用 data/secret.key 加密。') }}</small>
+      <small class="security-note">{{ t('请在可信设备上登录，使用完毕可主动退出。') }}</small>
     </section>
   </div>
 </template>

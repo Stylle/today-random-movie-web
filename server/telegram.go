@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -54,6 +55,14 @@ func cleanDefaultFilters(value any) (Filters, error) {
 	}
 	if f.YearFrom != "" && f.YearTo != "" && f.YearFrom > f.YearTo {
 		f.YearFrom, f.YearTo = f.YearTo, f.YearFrom
+	}
+	for _, rating := range []*float64{f.RatingMin, f.RatingMax} {
+		if rating != nil && (math.IsNaN(*rating) || math.IsInf(*rating, 0) || *rating < 0 || *rating > 10) {
+			return f, errors.New("评分必须在 0–10 之间")
+		}
+	}
+	if f.RatingMin != nil && f.RatingMax != nil && *f.RatingMin > *f.RatingMax {
+		f.RatingMin, f.RatingMax = f.RatingMax, f.RatingMin
 	}
 	if f.Libraries == nil {
 		f.Libraries = []string{}
