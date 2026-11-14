@@ -92,7 +92,7 @@ func (a *App) require(r *http.Request) authContext {
 }
 
 func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time, remember bool) {
-	cookie := &http.Cookie{Name: "trm_session", Value: token, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode}
+	cookie := &http.Cookie{Name: "trm_session", Value: token, Path: "/", HttpOnly: true, Secure: requestHTTPS(r), SameSite: http.SameSiteLaxMode}
 	if remember {
 		cookie.Expires = expires
 		cookie.MaxAge = int(time.Until(expires).Seconds())
@@ -101,7 +101,7 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expi
 }
 
 func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{Name: "trm_session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode})
+	http.SetCookie(w, &http.Cookie{Name: "trm_session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: requestHTTPS(r), SameSite: http.SameSiteLaxMode})
 }
 
 func publicUser(user M) M {
@@ -118,6 +118,9 @@ func (a *App) authRoute(w http.ResponseWriter, r *http.Request) {
 			fail(405, "method not allowed")
 		}
 		v := readBody(r)
+		if !a.loginGate.allow(r, str(v["username"])) {
+			fail(429, "尝试次数过多，请稍后重试")
+		}
 		user := a.one("SELECT * FROM users WHERE username=? COLLATE NOCASE", strings.TrimSpace(str(v["username"])))
 		if user == nil || !verifyPassword(str(v["password"]), str(user["pwd"])) {
 			fail(401, "用户名或密码错误")

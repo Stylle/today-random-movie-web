@@ -234,6 +234,7 @@ func TestNotificationChannelMigration(t *testing.T) {
 	t.Setenv("USER", "admin")
 	t.Setenv("PASSWORD", "test-only-password")
 	dir := t.TempDir()
+	loadSecret(dir) // A legacy deployment also retains its matching encryption key.
 	path := filepath.Join(dir, "app.db")
 	db, err := sql.Open("sqlite", path)
 	if err != nil {

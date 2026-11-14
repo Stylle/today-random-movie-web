@@ -47,7 +47,16 @@ function syncRoute() {
   adminSection.value = management.some(x => x.id === section) ? section : 'connection'
   navOpen.value = false
 }
-async function signOut() { await logout(); location.hash = '#/login'; syncRoute() }
+// Authentication may succeed while the hash already points to the desired page.
+watch(() => store.user, syncRoute)
+const signOutError = ref(''), signingOut = ref(false)
+async function signOut() {
+  if (signingOut.value) return
+  signingOut.value = true; signOutError.value = ''
+  try { await logout(); location.hash = '#/login'; syncRoute() }
+  catch { signOutError.value = '退出未完成，请检查网络后重试。当前会话仍可能有效。' }
+  finally { signingOut.value = false }
+}
 onMounted(async () => {
   window.addEventListener('hashchange', syncRoute)
   window.addEventListener('keydown', drawerKey)
@@ -80,6 +89,7 @@ onUnmounted(() => { window.removeEventListener('hashchange', syncRoute); window.
     </template>
     <header v-else class="topbar"><a class="brand" href="#/today"><img src="/logo.svg" alt="" /><b>{{ store.config.siteTitle }}</b></a><div class="top-actions"><AppearanceControls /></div></header>
     <div v-if="bootError" class="global-error">{{ t('无法连接服务：') }}{{ bootError }}</div>
+    <div v-if="signOutError" class="global-error" role="alert">{{ t(signOutError) }} <button :disabled="signingOut" @click="signOut">{{ t('重试') }}</button></div>
     <main class="page-wrap"><component :is="component" :key="route" v-bind="routeProps" /></main>
     <footer class="site-footer"><span>{{ t('© 2026 Stylle · 今日想看 · MIT License') }}</span></footer>
   </div>

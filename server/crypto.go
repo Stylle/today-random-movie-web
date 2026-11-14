@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,13 +13,39 @@ import (
 
 func loadSecret(dataDir string) []byte {
 	path := filepath.Join(dataDir, "secret.key")
-	if raw, err := os.ReadFile(path); err == nil && len(raw) == 32 {
+	info, err := os.Lstat(path)
+	if err == nil {
+		if !info.Mode().IsRegular() {
+			panic("secret.key must be a regular file; restore the matching backup")
+		}
+		raw, e := os.ReadFile(path)
+		must(e)
+		if len(raw) != 32 {
+			panic("invalid secret.key; restore the matching backup")
+		}
 		return raw
 	}
+	if !errors.Is(err, os.ErrNotExist) {
+		panic(err)
+	}
+	if _, e := os.Stat(filepath.Join(dataDir, "app.db")); !errors.Is(e, os.ErrNotExist) {
+		panic("existing database without secret.key; restore the matching backup")
+	}
 	key := make([]byte, 32)
-	_, err := rand.Read(key)
+	_, err = rand.Read(key)
 	must(err)
-	must(os.WriteFile(path, key, 0600))
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if errors.Is(err, os.ErrExist) {
+		return loadSecret(dataDir)
+	}
+	must(err)
+	_, err = f.Write(key)
+	if err == nil {
+		err = f.Sync()
+	}
+	closeErr := f.Close()
+	must(err)
+	must(closeErr)
 	return key
 }
 

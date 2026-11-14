@@ -1,0 +1,7 @@
+{
+  "kind": "movie",
+  "binary": "build/browser-app",
+  "health": "/api/health",
+  "route": "/#/today",
+  "form": ".login-card"
+}

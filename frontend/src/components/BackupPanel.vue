@@ -1,19 +1,18 @@
 <script setup>
 import { t } from '../i18n'
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
+import { waitForRestoredSession } from '../restore-wait.mjs'
+const lifecycle = new AbortController()
+onBeforeUnmount(() => lifecycle.abort())
 const props = defineProps({ base: { type: String, required: true }, csrf: { type: String, default: '' } })
 const fileInput = ref(null)
 const busy = ref(false), file = ref(null), confirm = ref(false), message = ref(''), failed = ref(false)
 async function download() {
  busy.value = true; message.value = ''; failed.value = false
  try {
-  const response = await fetch(props.base + '/backup', { credentials: 'same-origin' })
-  if (!response.ok) throw Error('备份失败，请检查服务器空间和文件完整性。')
-  const blob = await response.blob(), url = URL.createObjectURL(blob)
-  const link = document.createElement('a'); link.href = url
-  link.download = response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] || 'system-backup.zip'
-  link.click(); setTimeout(() => URL.revokeObjectURL(url), 60000)
-  message.value = '备份包已生成并交给浏览器下载，请确认文件已保存。'
+  const link = document.createElement('a'); link.href = props.base + '/backup'; link.download = ''
+  link.click()
+  message.value = '备份请求已提交，请在浏览器下载列表查看进度与结果。'
  } catch (error) { failed.value = true; message.value = error.message } finally { busy.value = false }
 }
 async function restore() {
@@ -24,7 +23,7 @@ async function restore() {
   const response = await fetch(props.base + '/restore', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/zip', 'X-Confirm-Restore': 'replace', 'X-CSRF-Token': csrf }, body: file.value })
   if (!response.ok) { const data = await response.json().catch(() => ({})); throw Error(data.message || data.error || data.detail || '恢复失败，当前数据未替换。') }
   message.value = '备份已校验，服务正在重新加载。请使用备份中的账号重新登录。'
-  setTimeout(() => location.reload(), 3000)
+  if (await waitForRestoredSession('/api/auth/me', lifecycle.signal)) location.reload()
  } catch (error) { failed.value = true; message.value = error.message; busy.value = false }
 }
 </script>

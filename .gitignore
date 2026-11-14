@@ -14,3 +14,7 @@ server/today-random-movie-*.exe
 *.log
 .idea/
 .vscode/
+
+/.browser-qa/
+
+/build/

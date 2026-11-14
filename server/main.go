@@ -32,6 +32,7 @@ type syncState struct {
 }
 
 type App struct {
+	loginGate     loginGate
 	posterMu      sync.Mutex
 	posterPending map[string]chan struct{}
 	posterSlots   chan struct{}
@@ -109,6 +110,9 @@ func (a *App) recoverRequest(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer a.recoverRequest(w, r)
+	if strings.HasPrefix(r.URL.Path, "/api/") && !browserWriteAllowed(r) {
+		fail(403, "请求来源无效，请从本站重新打开页面")
+	}
 	if a.restoring.Load() && r.URL.Path != "/api/health" {
 		fail(503, "系统正在恢复，请稍后重新登录")
 	}
@@ -193,7 +197,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const version = "0.9.0"
+const version = "0.10.0"
 
 func main() {
 	for runMain() {

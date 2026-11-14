@@ -31,6 +31,8 @@ export async function login(payload) {
 }
 
 export async function logout() {
-  try { await api('/api/auth/logout', { method: 'POST' }) } catch (_) {}
+  try { await api('/api/auth/logout', { method: 'POST' }) } catch (error) {
+    if (error.status !== 401) throw error
+  }
   store.user = null
 }

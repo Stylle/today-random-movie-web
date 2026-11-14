@@ -24,7 +24,7 @@ async function submit() {
 <template>
   <div class="login-wrap">
     <section class="login-card">
-      <div class="login-mark"><img src="/logo.svg" alt="" /><div><span class="eyebrow">WELCOME BACK</span><h1>{{ t('管理员登录') }}</h1></div></div>
+      <div class="login-mark"><img src="/logo.svg" alt="" /><div><h1>{{ t('管理员登录') }}</h1></div></div>
       <p>{{ t('登录后管理媒体库、选片偏好与通知。') }}</p>
       <label class="field"><span>{{ t('用户名') }}</span><input v-model="username" autocomplete="username" placeholder="admin" /></label>
       <label class="field"><span>{{ t('密码') }}</span><input v-model="password" type="password" autocomplete="current-password" :placeholder="t('请输入密码')" @keyup.enter="submit" /></label>

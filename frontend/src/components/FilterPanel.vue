@@ -31,7 +31,7 @@ function reset() {
 
 <template>
   <section class="filter-panel" :class="{ compact }">
-    <div class="filter-head"><div><span class="eyebrow">FILTERS</span><h3>{{ t('选片偏好') }}</h3></div><button class="text-btn" @click="reset">{{ t('重置') }}</button></div>
+    <div class="filter-head"><div><h3>{{ t('选片偏好') }}</h3></div><button class="text-btn" @click="reset">{{ t('重置') }}</button></div>
     <div class="library-chips" v-if="options.libraries?.length">
       <button v-for="library in options.libraries" :key="library.id" :class="{ on: modelValue.libraries?.includes(library.id) }" @click="toggleLibrary(library.id)">
         {{ library.name }} <small>{{ library.count }}</small>
