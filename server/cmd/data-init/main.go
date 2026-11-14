@@ -119,4 +119,3 @@ func main() {
 		log.Fatal("Cannot prepare dedicated data directory. Check read-only mounts, NAS ACL or root-squash; do not use a shared/system folder: ", err)
 	}
 }
-
