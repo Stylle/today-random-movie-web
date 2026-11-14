@@ -28,7 +28,7 @@ func validateMovieBackup(stage string) error {
 	if e = db.QueryRow("SELECT COUNT(*) FROM users WHERE role='admin'").Scan(&admins); e != nil || admins < 1 {
 		return errors.New("backup has no administrator")
 	}
-	rows, e := db.Query("SELECT value FROM settings WHERE key IN ('fn_username','fn_password','poster_tmdb_key') UNION ALL SELECT value FROM telegram_movie_config")
+	rows, e := db.Query("SELECT value FROM settings WHERE key IN ('fn_username','fn_password','poster_tmdb_key','poster_douying_key') UNION ALL SELECT value FROM telegram_movie_config")
 	if e != nil {
 		return e
 	}

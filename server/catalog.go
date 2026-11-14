@@ -190,7 +190,7 @@ func (a *App) movieJSON(movie Movie) M {
 	return M{
 		"id": movie.ID, "title": movie.Title, "year": movie.Year, "genres": movie.Genres, "countries": movie.Countries,
 		"overview": movie.Overview, "libraryId": movie.LibraryID, "library": movie.Library, "watched": movie.Watched,
-		"duration": movie.Duration, "rating": movie.Rating, "posterUrl": "/api/posters/" + movie.ID + "?cache=only", "posterSources": externalPosters(M{"posters": movie.PosterSources, "cover": movie.CoverPath}),
+		"duration": movie.Duration, "rating": movie.Rating, "posterUrl": "/api/posters/" + movie.ID + "?cache=only", "posterSources": orderedPosters(externalPosters(M{"posters": movie.PosterSources, "cover": movie.CoverPath}), a.settings()), "fallbackOrder": posterOrder(a.settings()),
 	}
 }
 
@@ -467,6 +467,9 @@ func (a *App) posterRoute(w http.ResponseWriter, r *http.Request) {
 	cachePath := filepath.Join(a.dataDir, "posters", id)
 	file, err := os.Open(cachePath)
 	if err != nil {
+		if r.URL.Query().Get("strict") == "1" {
+			fail(404, "没有已有封面缓存")
+		}
 		servePlaceholder(w, id)
 		return
 	}

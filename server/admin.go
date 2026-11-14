@@ -49,7 +49,7 @@ func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 		username, _ := openSealed(a.secret, s["fn_username"])
 		respond(w, M{
 			"fnServer": s["fn_server"], "fnUsername": username, "fnHasPassword": s["fn_password"] != "", "fnInsecureTls": truth(s["fn_insecure_tls"]),
-			"hasTmdbKey": s["poster_tmdb_key"] != "", "doubanEnabled": s["poster_douban_enabled"] != "0",
+			"hasTmdbKey": s["poster_tmdb_key"] != "", "hasDouyingKey": s["poster_douying_key"] != "", "priorities": posterPriorities(s), "doubanEnabled": s["poster_douban_enabled"] != "0",
 			"lastSyncAt": s["last_sync_at"], "lastSyncError": s["last_sync_error"],
 		})
 	case p == "/api/admin/fnos" && r.Method == http.MethodPut:

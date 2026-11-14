@@ -8,12 +8,13 @@ import { store, loadConfig } from '../store.js'
 import FilterPanel from '../components/FilterPanel.vue'
 
 const tabs = [
-  { id: 'connection', label: '连接与同步', icon: '⌁' },
-  { id: 'webhook', label: 'Webhook', icon: '↗' },
-  { id: 'telegram', label: 'Telegram 机器人', icon: '✈' },
+  { id: 'connection', label: '连接设置', icon: '⌁' },
+ { id: 'sources', label: '数据来源', icon: '⌁' },
+  { id: 'webhook', label: '回调通知', icon: '↗' },
+  { id: 'telegram', label: '电报助手', icon: '✈' },
   { id: 'schedules', label: '自动推送', icon: '◷' },
   { id: 'history', label: '运行记录', icon: '≡' },
- { id: 'backup', label: '备份与恢复', icon: '↓' },
+ { id: 'backup', label: '备份恢复', icon: '↓' },
 ]
 const props = defineProps({ section: { type: String, default: 'connection' } })
 const tab = computed(() => props.section)
@@ -60,7 +61,7 @@ async function loadAll() {
     api('/api/movies/options'), api('/api/admin/sync'), api('/api/admin/sync-schedule'), api('/api/admin/history'),
     api('/api/admin/telegram'), api('/api/random/defaults'),
   ])
-  settings.value = { ...s, fnPassword: '', tmdbKey: '', clearTmdbKey: false }
+  settings.value = { ...s, fnPassword: '', tmdbKey: '', clearTmdbKey: false, douyingKey: '', clearDouyingKey: false }
   webhook.value = w
   schedules.value = rules.items
   options.value = opts
@@ -90,15 +91,20 @@ const testFn = () => run('test', async () => {
   flash(`连接成功，读取到 ${result.libraries} 个电影媒体库`)
 })
 
+const providerDefinitions=[{id:'douban',name:'豆瓣公开信息'},{id:'tmdb',name:'TMDB'},{id:'douying',name:'豆影 DoubanInfo'},{id:'cache',name:'已有缓存'},{id:'placeholder',name:'占位图'}]
+const sortedProviders=computed(()=>[...providerDefinitions].sort((a,b)=>(settings.value?.priorities[a.id]||99)-(settings.value?.priorities[b.id]||99)))
+function normalizeProviders(order){const priorities={douban:0,tmdb:0,douying:0,cache:0,placeholder:0};order.filter(x=>x!=='placeholder').concat(['placeholder']).forEach((id,index)=>priorities[id]=index+1);settings.value.priorities=priorities}
+function toggleProvider(id,on){const order=sortedProviders.value.filter(p=>settings.value.priorities[p.id]>0&&p.id!==id).map(p=>p.id);if(on)order.splice(Math.max(0,order.indexOf('placeholder')),0,id);normalizeProviders(order)}
+function moveProvider(id,direction){const order=sortedProviders.value.filter(p=>settings.value.priorities[p.id]>0).map(p=>p.id),index=order.indexOf(id),next=index+direction;if(index<0||next<0||next>=order.length||order[next]==='placeholder')return;[order[index],order[next]]=[order[next],order[index]];normalizeProviders(order)}
 const posterTest = ref('')
 const savePosterSettings = () => run('poster-save', async () => {
- const result = await api('/api/admin/poster-settings', { method: 'PUT', body: jsonBody({ tmdbKey: settings.value.tmdbKey, clearKey: settings.value.clearTmdbKey, doubanEnabled: settings.value.doubanEnabled }) })
- settings.value.hasTmdbKey = result.hasTmdbKey; settings.value.tmdbKey = ''; settings.value.clearTmdbKey = false; posterTest.value = ''
-}, '封面设置已保存，返回影片页面即可自动补查，无需重新同步飞牛')
-const providerStatus = value => t(({ ok: '可用', unavailable: '连接失败或被限制', unauthorized: '认证失败或访问被限制', missing_key: '尚未配置密钥', not_found: '未匹配到影片', disabled: '已关闭' })[value] || '查询失败')
+ const result = await api('/api/admin/poster-settings', { method: 'PUT', body: jsonBody({ tmdbKey: settings.value.tmdbKey, clearKey: settings.value.clearTmdbKey, doubanEnabled: settings.value.priorities.douban > 0, priorities: settings.value.priorities, douyingKey: settings.value.douyingKey, clearDouyingKey: settings.value.clearDouyingKey }) })
+ settings.value.hasTmdbKey = result.hasTmdbKey; settings.value.hasDouyingKey=result.hasDouyingKey; settings.value.tmdbKey = ''; settings.value.clearTmdbKey = false; settings.value.douyingKey = ''; settings.value.clearDouyingKey = false; posterTest.value = ''
+}, '数据源设置已保存')
+const providerStatus = value => t(({ ok: '可用', unavailable: '连接失败或被限制', unauthorized: '认证失败或访问被限制', missing_key: '尚未配置密钥', not_found: '未匹配到影片', rate_limited: '已达调用额度，稍后重试', disabled: '已关闭' })[value] || '查询失败')
 const testPosterSettings = () => run('poster-test', async () => {
  const result = await api('/api/admin/posters/test', { method: 'POST' })
- posterTest.value = `豆瓣：${providerStatus(result.douban)}；TMDB：${providerStatus(result.tmdb)}`
+ posterTest.value = `豆瓣：${providerStatus(result.douban)}；TMDB：${providerStatus(result.tmdb)}；豆影：${providerStatus(result.douying)}`
 }, '封面来源检测完成')
 const refreshPosters = () => run('poster-refresh', () => api('/api/admin/posters/refresh', { method: 'POST' }), '已重置封面查询缓存，返回影片页面后自动重新查询')
 
@@ -220,6 +226,28 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
 
     <section class="admin-content" v-if="settings">
  <BackupPanel v-if="tab === 'backup'" base="/api/admin" />
+      <template v-if="tab === 'sources'">        <div class="panel poster-settings">
+          <h3>{{ t('影视信息与封面接口') }}</h3>
+          <div class="provider-order"><div class="provider-row" v-for="provider in sortedProviders" :key="provider.id">
+           <span class="provider-rank">{{ settings.priorities[provider.id] || '—' }}</span><strong>{{ t(provider.name) }}</strong>
+           <label class="check-row"><input type="checkbox" :checked="settings.priorities[provider.id]>0" :disabled="provider.id==='placeholder'" @change="toggleProvider(provider.id,$event.target.checked)" />{{ t(settings.priorities[provider.id]>0?'已启用':'已停用（0）') }}</label>
+           <button class="ghost" :disabled="!settings.priorities[provider.id]||settings.priorities[provider.id]===1||provider.id==='placeholder'" @click="moveProvider(provider.id,-1)" :aria-label="'提高'+provider.name+'优先级'">↑</button><button class="ghost" :disabled="!settings.priorities[provider.id]||settings.priorities[provider.id]>=settings.priorities.placeholder-1||provider.id==='placeholder'" @click="moveProvider(provider.id,1)" :aria-label="'降低'+provider.name+'优先级'">↓</button>
+          </div></div>
+          <p class="muted small">使用箭头调整顺序，取消勾选即停用（优先级 0）。占位图始终作为最后兜底。已有缓存为只读，不从飞牛下载。</p>
+          <p class="muted">{{ t('影片信息来自飞牛；图片由当前设备依次尝试豆瓣、TMDB、已有缓存和占位图，不从飞牛下载图片。') }}</p>
+
+          <p class="muted small">{{ t('豆瓣公开入口可能限制访问，无法查询时会继续使用 TMDB；不需要填写豆瓣密钥。') }}</p>
+          <label class="field"><span>TMDB API Key / API Read Access Token</span><input v-model="settings.tmdbKey" type="password" autocomplete="new-password" :placeholder="settings.hasTmdbKey ? t('已保存；留空不修改') : t('填写 TMDB 密钥以启用备用封面查询')" /></label>
+          <small>{{ t('密钥仅在服务端加密保存，不发送给浏览器或图片站。') }} <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer">{{ t('获取 TMDB 密钥') }}</a></small>
+          <p v-if="!settings.hasTmdbKey" class="inline-error">{{ t('尚未配置 TMDB 密钥；豆瓣不可用且没有旧缓存时，只能显示占位图。') }}</p>
+          <label v-if="settings.hasTmdbKey" class="check-row"><input v-model="settings.clearTmdbKey" type="checkbox" /><span>{{ t('清除已保存的 TMDB 密钥') }}</span></label>
+          <label class="field"><span>豆影 DoubanInfo API Key</span><input v-model="settings.douyingKey" type="password" autocomplete="new-password" :placeholder="settings.hasDouyingKey ? '已保存；留空不修改' : '填写豆影 API Key'" /></label>
+          <small>豆影免费额度：10 次/分钟、200 次/天。应用持久化记录额度，超限跳过并使用下一个来源。<a href="https://doubaninfo.com/api/api_usage.php" target="_blank" rel="noopener noreferrer">官方接口说明与申请 Key</a></small>
+          <label class="check-row"><input v-model="settings.clearDouyingKey" type="checkbox" /><span>清除已保存的豆影密钥</span></label>
+          <div class="action-row"><button class="primary" :disabled="!!busy" @click="savePosterSettings">{{ t('保存封面设置') }}</button><button class="ghost" :disabled="!!busy" @click="testPosterSettings">{{ t('检测已保存的来源') }}</button><button class="ghost" :disabled="!!busy" @click="refreshPosters">{{ t('重新查询封面') }}</button></div>
+          <p v-if="posterTest" role="status">{{ posterTest }}</p>
+        </div>
+      </template>
       <template v-if="tab === 'connection'">
         <div class="section-title"><div><span class="eyebrow">FNOS / FNTV</span><h1>{{ t('连接与同步') }}</h1><p>{{ t('凭据只在服务端加密保存，浏览器不会接触飞牛会话。') }}</p></div><span class="status-dot" :class="{ on: settings.lastSyncAt }">{{ settings.lastSyncAt ? t('已同步') : t('未同步') }}</span></div>
         <div class="panel">
@@ -231,18 +259,6 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
           </div>
           <label class="check-row warning-check"><input v-model="settings.fnInsecureTls" type="checkbox" /><span>{{ t('允许自签名 HTTPS 证书（仅可信内网 NAS）') }}</span></label>
           <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'fn'" @click="saveFn">{{ busy === 'fn' ? t('保存中…') : t('保存连接') }}</button><button class="ghost" :disabled="busy === 'test'" @click="testFn">{{ busy === 'test' ? t('测试中…') : t('测试连接') }}</button></div>
-        </div>
-        <div class="panel poster-settings">
-          <h3>{{ t('封面来源') }}</h3>
-          <p class="muted">{{ t('影片信息来自飞牛；图片由当前设备依次尝试豆瓣、TMDB、已有缓存和占位图，不从飞牛下载图片。') }}</p>
-          <label class="check-row"><input v-model="settings.doubanEnabled" type="checkbox" /><span>{{ t('尝试查询豆瓣公开影片信息') }}</span></label>
-          <p class="muted small">{{ t('豆瓣公开入口可能限制访问，无法查询时会继续使用 TMDB；不需要填写豆瓣密钥。') }}</p>
-          <label class="field"><span>TMDB API Key / API Read Access Token</span><input v-model="settings.tmdbKey" type="password" autocomplete="new-password" :placeholder="settings.hasTmdbKey ? t('已保存；留空不修改') : t('填写 TMDB 密钥以启用备用封面查询')" /></label>
-          <small>{{ t('密钥仅在服务端加密保存，不发送给浏览器或图片站。') }} <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer">{{ t('获取 TMDB 密钥') }}</a></small>
-          <p v-if="!settings.hasTmdbKey" class="inline-error">{{ t('尚未配置 TMDB 密钥；豆瓣不可用且没有旧缓存时，只能显示占位图。') }}</p>
-          <label v-if="settings.hasTmdbKey" class="check-row"><input v-model="settings.clearTmdbKey" type="checkbox" /><span>{{ t('清除已保存的 TMDB 密钥') }}</span></label>
-          <div class="action-row"><button class="primary" :disabled="!!busy" @click="savePosterSettings">{{ t('保存封面设置') }}</button><button class="ghost" :disabled="!!busy" @click="testPosterSettings">{{ t('检测已保存的来源') }}</button><button class="ghost" :disabled="!!busy" @click="refreshPosters">{{ t('重新查询封面') }}</button></div>
-          <p v-if="posterTest" role="status">{{ posterTest }}</p>
         </div>
         <div class="panel sync-panel">
           <div><h3>{{ t('媒体库索引') }}</h3><p>{{ t('同步影片信息；缺失的外部封面地址会在访问影片时自动查询，无需重新同步影片列表。') }}</p><small v-if="settings.lastSyncAt">{{ t('上次同步：') }}{{ new Date(settings.lastSyncAt).toLocaleString() }}</small></div>
@@ -331,6 +347,6 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
         <div class="panel"><h3>{{ t('通知记录') }}</h3><div class="table-wrap mobile-records"><table><thead><tr><th>{{ t('时间') }}</th><th>{{ t('渠道') }}</th><th>{{ t('事件 / 规则') }}</th><th>{{ t('状态') }}</th><th>{{ t('错误') }}</th></tr></thead><tbody><tr v-for="row in (history.notifications || history.webhooks)" :key="row.id"><td :data-label="t('时间')">{{ new Date(row.created_at).toLocaleString() }}</td><td :data-label="t('渠道')">{{ channelLabel(row.channel) }}</td><td :data-label="t('事件 / 规则')">{{ row.event === 'test' ? t('测试通知') : row.event === 'movie_pick' ? t('影片推荐') : row.event }}<small v-if="row.schedule_id"> · {{ row.rule_name || row.schedule_id }}</small></td><td :data-label="t('状态')"><span :class="row.ok ? 'ok-text' : 'danger-text'">{{ row.ok ? (row.channel === 'telegram' ? t('已发送') : `HTTP ${row.status_code}`) : t('失败') }}</span></td><td :data-label="t('错误')">{{ row.error }}</td></tr></tbody></table></div></div>
       </template>
     </section>
-    <div v-if="message" class="toast" :class="{ bad }">{{ message }}</div>
+    <div v-if="message" role="status" aria-live="polite" class="toast" :class="{ bad }">{{ message }}</div>
   </div>
 </template>

@@ -74,7 +74,7 @@ onMounted(async () => {
 
       <section class="movie-stage" :class="{ empty: !movie }">
         <template v-if="movie">
-          <div class="poster-wrap"><MoviePoster :movie="movie" /><span v-if="movie.watched" class="watched-badge">{{ t('已看过') }}</span></div>
+          <div class="poster-wrap"><MoviePoster :movie="movie" @metadata="data => { if (!movie.overview) movie.overview=data.overview }" /><span v-if="movie.watched" class="watched-badge">{{ t('已看过') }}</span></div>
           <div class="movie-copy">
             <span class="pick-label">TODAY'S MOVIE</span>
             <h2>{{ movie.title }}</h2>

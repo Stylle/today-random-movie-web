@@ -61,7 +61,7 @@ func matchingTitle(title, year string, row M, keys ...string) bool {
 		}
 	}
 	for _, key := range keys {
-		if v := normalizedTitle(str(row[key])); v != "" && v == normalizedTitle(title) {
+		if v := normalizedTitle(str(row[key])); v != "" && (v == normalizedTitle(title) || normalizedTitle(shortChineseTitle(str(row[key]))) == normalizedTitle(shortChineseTitle(title))) {
 			return true
 		}
 	}
@@ -133,6 +133,7 @@ func (a *App) lookupTMDB(ctx context.Context, movie Movie, key string) (string, 
 	}
 	for _, row := range candidates {
 		if sources := externalPosters(M{"poster_path": row["poster_path"]}); len(sources) > 0 {
+			a.fillMovieSummary(movie, str(row["overview"]))
 			return sources[0], "ok"
 		}
 	}
@@ -143,6 +144,9 @@ var metaTag = regexp.MustCompile(`(?is)<meta\s+[^>]*>`)
 var metaAttr = regexp.MustCompile(`(?i)(property|name|content)\s*=\s*["']([^"']*)["']`)
 
 func (a *App) lookupDouban(ctx context.Context, movie Movie) (string, string) {
+	if !a.reservePublicDouban() {
+		return "", "rate_limited"
+	}
 	endpoint := "https://movie.douban.com/j/subject_suggest?q=" + url.QueryEscape(movie.Title)
 	if numericProviderID.MatchString(movie.DoubanID) {
 		endpoint = "https://movie.douban.com/subject/" + movie.DoubanID + "/"
@@ -215,30 +219,84 @@ func (a *App) resolvePosters(ctx context.Context, id string) M {
 	}
 	movie := decodeMovie(row)
 	key, _ := openSealed(a.secret, settings["poster_tmdb_key"])
-	var douban, tmdb, ds, ts string
-	var workers sync.WaitGroup
-	workers.Add(2)
-	go func() {
-		defer workers.Done()
-		if settings["poster_douban_enabled"] == "0" {
-			ds = "disabled"
-			return
+	sources := externalPosters(M{"posters": movie.PosterSources, "cover": movie.CoverPath})
+	statuses := []string{}
+	higherSourceFound := false
+	for _, provider := range posterOrder(settings) {
+		for _, saved := range sources {
+			if provider == "douban" && strings.Contains(saved, ".doubanio.com/") || provider == "tmdb" && strings.HasPrefix(saved, "https://image.tmdb.org/") {
+				higherSourceFound = true
+			}
 		}
-		douban, ds = a.lookupDouban(ctx, movie)
-	}()
-	go func() { defer workers.Done(); tmdb, ts = a.lookupTMDB(ctx, movie, key) }()
-	workers.Wait()
+		var image, status string
+		attempt, stop := context.WithTimeout(ctx, 3*time.Second)
+		switch provider {
+		case "douban":
+			if settings["poster_douban_enabled"] == "0" {
+				stop()
+				continue
+			}
+			image, status = a.lookupDouban(attempt, movie)
+		case "tmdb":
+			image, status = a.lookupTMDB(attempt, movie, key)
+		case "douying":
+			if higherSourceFound {
+				stop()
+				continue
+			}
+			image, status = a.lookupDouying(attempt, movie, settings)
+		default:
+			stop()
+			continue
+		}
+		stop()
+		statuses = append(statuses, provider+":"+status)
+		if image != "" {
+			higherSourceFound = true
+			sources = append(sources, image)
+		}
+	}
 	if ctx.Err() != nil {
 		return a.posterLookupJSON(row)
 	}
-	existing := externalPosters(M{"posters": movie.PosterSources, "cover": movie.CoverPath})
-	sources := externalPosters(M{"posters": append([]string{douban, tmdb}, existing...)})
-	status := "ok"
-	if len(sources) == 0 {
-		status = "douban:" + ds + ",tmdb:" + ts
+	sources = orderedPosters(sources, settings)
+	status := strings.Join(statuses, ",")
+	if len(sources) > 0 && len(statuses) > 0 && strings.HasSuffix(statuses[0], ":ok") {
+		status = "ok"
 	}
-	a.exec("UPDATE movies SET poster_sources=?,poster_checked_at=?,poster_revision=?,poster_lookup_status=? WHERE id=? AND title=? AND year=? AND tmdb_id=? AND douban_id=?", jsonString(sources), time.Now().Unix(), revision, status, id, movie.Title, movie.Year, movie.TMDBID, movie.DoubanID)
+	checkedAt := time.Now().Unix()
+	if strings.Contains(status, "rate_limited") {
+		checkedAt -= 570
+	}
+	a.exec("UPDATE movies SET poster_sources=?,poster_checked_at=?,poster_revision=?,poster_lookup_status=? WHERE id=? AND title=? AND year=? AND tmdb_id=? AND douban_id=?", jsonString(sources), checkedAt, revision, status, id, movie.Title, movie.Year, movie.TMDBID, movie.DoubanID)
+
 	return a.posterLookupJSON(a.one("SELECT * FROM movies WHERE id=?", id))
+}
+
+// This quota-limited fallback is requested only when earlier images failed.
+func (a *App) resolveDouyingFallback(ctx context.Context, id string) M {
+	row := a.one("SELECT * FROM movies WHERE id=?", id)
+	if row == nil {
+		fail(404, "影片不存在")
+	}
+	settings := a.settings()
+	if posterPriorities(settings)["douying"] == 0 {
+		return a.posterLookupJSON(row)
+	}
+	movie := decodeMovie(row)
+	for _, source := range movie.PosterSources {
+		if strings.HasPrefix(source, "https://doubaninfo.com/dbposter/") {
+			return a.posterLookupJSON(row)
+		}
+	}
+	source, status := a.lookupDouying(ctx, movie, settings)
+	if source != "" {
+		movie.PosterSources = externalPosters(M{"posters": append(movie.PosterSources, source)})
+		a.exec("UPDATE movies SET poster_sources=? WHERE id=?", jsonString(movie.PosterSources), id)
+	}
+	result := a.posterLookupJSON(a.one("SELECT * FROM movies WHERE id=?", id))
+	result["status"] = status
+	return result
 }
 
 func (a *App) posterLookupJSON(row M) M {
@@ -246,7 +304,7 @@ func (a *App) posterLookupJSON(row M) M {
 		return M{"posterSources": []string{}}
 	}
 	movie := decodeMovie(row)
-	return M{"posterSources": externalPosters(M{"posters": movie.PosterSources, "cover": movie.CoverPath}), "status": str(row["poster_lookup_status"])}
+	return M{"posterSources": orderedPosters(externalPosters(M{"posters": movie.PosterSources, "cover": movie.CoverPath}), a.settings()), "fallbackOrder": posterOrder(a.settings()), "overview": movie.Overview, "status": str(row["poster_lookup_status"])}
 }
 
 func (a *App) savePosterSettings(w http.ResponseWriter, r *http.Request) {
@@ -265,8 +323,29 @@ func (a *App) savePosterSettings(w http.ResponseWriter, r *http.Request) {
 	} else if truth(v["clearKey"]) {
 		updates["poster_tmdb_key"] = ""
 	}
+	if value, ok := v["priorities"]; ok {
+		var priorities map[string]int
+		b, _ := json.Marshal(value)
+		if json.Unmarshal(b, &priorities) != nil || !validPosterPriorities(priorities) {
+			fail(400, "优先级必须为 0–5，启用项不得重复，且必须启用占位图")
+		}
+		updates["poster_priorities"] = jsonString(priorities)
+		updates["poster_douban_enabled"] = boolString(priorities["douban"] > 0)
+	}
+	if value := strings.TrimSpace(str(v["douyingKey"])); value != "" {
+		if len(value) > 4096 || strings.ContainsAny(value, "\r\n\t ") {
+			fail(400, "豆影密钥格式无效")
+		}
+		encoded, e := seal(a.secret, value)
+		if e != nil {
+			fail(500, "密钥保存失败")
+		}
+		updates["poster_douying_key"] = encoded
+	} else if truth(v["clearDouyingKey"]) {
+		updates["poster_douying_key"] = ""
+	}
 	a.updateSettings(updates)
-	respond(w, M{"ok": true, "hasTmdbKey": a.settings()["poster_tmdb_key"] != ""})
+	respond(w, M{"ok": true, "hasTmdbKey": a.settings()["poster_tmdb_key"] != "", "hasDouyingKey": a.settings()["poster_douying_key"] != ""})
 }
 
 func (a *App) testPosterSettings(w http.ResponseWriter, r *http.Request) {
@@ -275,18 +354,34 @@ func (a *App) testPosterSettings(w http.ResponseWriter, r *http.Request) {
 	settings := a.settings()
 	key, _ := openSealed(a.secret, settings["poster_tmdb_key"])
 	movie := Movie{Title: "登堂入室", Year: "2012"}
-	var douban, tmdb string
+	var douban, tmdb, douying string
 	var workers sync.WaitGroup
-	workers.Add(2)
+	workers.Add(3)
 	go func() {
 		defer workers.Done()
-		if settings["poster_douban_enabled"] == "0" {
+		if settings["poster_douban_enabled"] == "0" || posterPriorities(settings)["douban"] == 0 {
 			douban = "disabled"
 			return
 		}
 		_, douban = a.lookupDouban(ctx, movie)
 	}()
 	go func() { defer workers.Done(); _, tmdb = a.lookupTMDB(ctx, movie, key) }()
+	go func() {
+		defer workers.Done()
+		if posterPriorities(settings)["douying"] == 0 {
+			douying = "disabled"
+			return
+		}
+		_, douying = a.lookupDouying(ctx, movie, settings)
+	}()
 	workers.Wait()
-	respond(w, M{"douban": douban, "tmdb": tmdb, "message": fmt.Sprintf("豆瓣：%s；TMDB：%s", douban, tmdb)})
+	respond(w, M{"douban": douban, "tmdb": tmdb, "douying": douying, "message": fmt.Sprintf("豆瓣：%s；TMDB：%s", douban, tmdb)})
+}
+
+func (a *App) fillMovieSummary(movie Movie, summary string) {
+	summary = strings.TrimSpace(summary)
+	if movie.ID == "" || summary == "" {
+		return
+	}
+	a.exec("UPDATE movies SET overview=? WHERE id=? AND title=? AND year=? AND overview=''", truncate(summary, 20000), movie.ID, movie.Title, movie.Year)
 }

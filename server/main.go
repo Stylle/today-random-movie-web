@@ -174,7 +174,11 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 		a.require(r)
 		ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 		defer cancel()
-		respond(w, a.resolvePosters(ctx, r.URL.Query().Get("id")))
+		if r.URL.Query().Get("fallback") == "douying" {
+			respond(w, a.resolveDouyingFallback(ctx, r.URL.Query().Get("id")))
+		} else {
+			respond(w, a.resolvePosters(ctx, r.URL.Query().Get("id")))
+		}
 	case strings.HasPrefix(p, "/api/posters/") && r.Method == http.MethodGet:
 		a.require(r)
 		a.posterRoute(w, r)
@@ -189,7 +193,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const version = "0.8.0"
+const version = "0.9.0"
 
 func main() {
 	for runMain() {

@@ -84,7 +84,7 @@ onUnmounted(() => { active = false; ready = false; clearTimeout(timer); request?
     <div class="result-line"><span>{{ t('共') }} {{ total }} {{ t('部影片') }}</span><span v-if="busy">{{ t('正在载入…') }}</span></div>
     <div ref="grid" class="movie-grid" :aria-busy="busy">
       <button class="movie-card" v-for="item in items" :key="item.id" @click="selected = item">
-        <div class="card-poster"><MoviePoster :movie="item" loading="lazy" /><span v-if="item.rating">★ {{ Number(item.rating).toFixed(1) }}</span></div>
+        <div class="card-poster"><MoviePoster :movie="item" loading="lazy" @metadata="data => { if (!item.overview) item.overview=data.overview }" /><span v-if="item.rating">★ {{ Number(item.rating).toFixed(1) }}</span></div>
         <b>{{ item.title }}</b><small>{{ [item.year, item.library].filter(Boolean).join(' · ') }}</small>
       </button>
     </div>
@@ -92,7 +92,7 @@ onUnmounted(() => { active = false; ready = false; clearTimeout(timer); request?
     <div class="pagination" v-if="total > pageSize"><button class="ghost" :disabled="page <= 1" @click="changePage(page - 1)">{{ t('上一页') }}</button><span>{{ page }} / {{ Math.ceil(total / pageSize) }}</span><button class="ghost" :disabled="page >= Math.ceil(total / pageSize)" @click="changePage(page + 1)">{{ t('下一页') }}</button></div>
 
     <div class="modal-layer" v-if="selected" @click.self="selected = null">
-      <article class="movie-modal"><button class="modal-close" @click="selected = null">×</button><MoviePoster :movie="selected" /><div><span class="eyebrow">MOVIE DETAILS</span><h2>{{ selected.title }}</h2><p class="movie-meta">{{ [selected.year, selected.library, selected.duration].filter(Boolean).join(' · ') }}</p><div class="tags"><span v-for="tag in selected.genres" :key="tag">{{ tag }}</span></div><p class="overview">{{ selected.overview || t('暂无简介。') }}</p></div></article>
+      <article class="movie-modal"><button class="modal-close" @click="selected = null">×</button><MoviePoster :movie="selected" @metadata="data => { if (!selected.overview) selected.overview=data.overview }" /><div><span class="eyebrow">MOVIE DETAILS</span><h2>{{ selected.title }}</h2><p class="movie-meta">{{ [selected.year, selected.library, selected.duration].filter(Boolean).join(' · ') }}</p><div class="tags"><span v-for="tag in selected.genres" :key="tag">{{ tag }}</span></div><p class="overview">{{ selected.overview || t('暂无简介。') }}</p></div></article>
     </div>
   </div>
 </template>

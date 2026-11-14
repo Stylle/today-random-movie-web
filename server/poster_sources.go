@@ -9,7 +9,7 @@ import (
 // Only explicit image references are used. An ID or title is not an image URL.
 // No provider API key or FnOS session is needed or exposed to the browser.
 func externalPosters(metadata M) []string {
-	groups := [2][]string{}
+	groups := [3][]string{}
 	seen := map[string]bool{}
 	var walk func(any, string, int)
 	walk = func(value any, key string, depth int) {
@@ -58,6 +58,9 @@ func externalPosters(metadata M) []string {
 			if host == "image.tmdb.org" && strings.HasPrefix(u.Path, "/t/p/") {
 				group = 1
 			}
+			if host == "doubaninfo.com" && strings.HasPrefix(u.Path, "/dbposter/") {
+				group = 2
+			}
 			if group >= 0 && !seen[raw] {
 				seen[raw] = true
 				groups[group] = append(groups[group], raw)
@@ -65,5 +68,9 @@ func externalPosters(metadata M) []string {
 		}
 	}
 	walk(metadata, "", 0)
-	return append(append([]string{}, groups[0][:min(1, len(groups[0]))]...), groups[1][:min(1, len(groups[1]))]...)
+	out := []string{}
+	for _, group := range groups {
+		out = append(out, group[:min(1, len(group))]...)
+	}
+	return out
 }

@@ -50,6 +50,9 @@ func movieBotJSON(t *testing.T, w *httptest.ResponseRecorder) M {
 	return out
 }
 func movieBotMock(t *testing.T, a *App, handler func(http.ResponseWriter, *http.Request, string)) {
+	a.posterHTTP = &http.Client{Transport: posterTransport(func(*http.Request) (*http.Response, error) {
+		return posterResponse(503, "fixture metadata unavailable"), nil
+	})}
 	t.Helper()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		method := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]

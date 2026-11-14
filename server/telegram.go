@@ -438,7 +438,7 @@ func (a *App) pollMovieBot(ctx context.Context, cfg movieBotConfig, revision str
 					var payload M
 					payload, err = a.prepareMovieReply(ctx, cfg, revision, u)
 					if err == nil && payload != nil {
-						err = a.botCall(ctx, cfg.Token, "sendMessage", payload, nil)
+						err = a.sendMovieBotPayload(ctx, cfg.Token, payload)
 					}
 					if err != nil {
 						break
@@ -588,7 +588,7 @@ func (a *App) botMoviePayload(cfg movieBotConfig, revision string, movie Movie, 
 	if play == nil {
 		play = a.botButton(cfg, revision, "打开飞牛影视", "play-unavailable", M{})
 	}
-	return M{"chat_id": cfg.ChatID, "text": movieBotText(movie), "reply_markup": M{"inline_keyboard": [][]M{{reroll, play}}}, "link_preview_options": M{"is_disabled": true}}
+	return M{"_poster_movie": movie.ID, "chat_id": cfg.ChatID, "text": movieBotText(movie), "reply_markup": M{"inline_keyboard": [][]M{{reroll, play}}}, "link_preview_options": M{"is_disabled": true}}
 }
 
 // Persist the chosen response before sending, so network retries do not pick a

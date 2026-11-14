@@ -10,9 +10,9 @@ import AppearanceControls from './components/AppearanceControls.vue'
 import UiIcon from './components/UiIcon.vue'
 const routes = { today: HomeView, library: LibraryView, login: LoginView, admin: AdminView }
 const management = [
-  { id: 'connection', label: '连接与同步' }, { id: 'webhook', label: 'Webhook' },
-  { id: 'telegram', label: 'Telegram 机器人' }, { id: 'schedules', label: '自动推送' },
-  { id: 'history', label: '运行记录' }, { id: 'backup', label: '备份与恢复' },
+  { id: 'connection', label: '连接设置' }, { id: 'sources', label: '数据来源' }, { id: 'webhook', label: '回调通知' },
+  { id: 'telegram', label: '电报助手' }, { id: 'schedules', label: '自动推送' },
+  { id: 'history', label: '运行记录' }, { id: 'backup', label: '备份恢复' },
 ]
 const route = ref('today'), adminSection = ref('connection'), navOpen = ref(false), bootError = ref('')
 const component = computed(() => routes[route.value] || HomeView)
@@ -65,10 +65,10 @@ onUnmounted(() => { window.removeEventListener('hashchange', syncRoute); window.
         <a class="brand" href="#/today"><img src="/logo.svg" alt="" /><span class="brand-copy"><b>{{ store.config.siteTitle }}</b><small>{{ t('今天，就看这一部') }}</small></span></a>
         <nav aria-label="主导航" @click="navOpen = false">
           <a href="#/today" :class="{ active: route === 'today' }" :aria-current="route === 'today' ? 'page' : undefined"><UiIcon name="releases" />{{ t('今日想看') }}</a>
-          <a href="#/library" :class="{ active: route === 'library' }" :aria-current="route === 'library' ? 'page' : undefined"><UiIcon name="files" />{{ t('影片库') }}</a>
+          <a href="#/library" :class="{ active: route === 'library' }" :aria-current="route === 'library' ? 'page' : undefined"><UiIcon name="files" />{{ t('影片列表') }}</a>
           <span class="movie-nav-label">{{ t('管理设置') }}</span>
           <a v-for="item in management" :key="item.id" :href="`#/admin/${item.id}`" :class="{ active: route === 'admin' && adminSection === item.id }" :aria-current="route === 'admin' && adminSection === item.id ? 'page' : undefined"><UiIcon :name="item.id" />{{ t(item.label) }}</a>
-          <button type="button" data-about-open @click="navOpen = false"><UiIcon name="account" />{{ t('关于') }}</button>
+          <button type="button" data-about-open @click="navOpen = false"><UiIcon name="account" />{{ t('关于项目') }}</button>
         </nav>
         <div class="movie-sidebar-foot"><div class="movie-account"><strong>{{ store.user.username }}</strong><button type="button" class="movie-signout" @click="signOut">{{ t('退出登录') }}</button></div><small>© 2026 Stylle · MIT License</small></div>
       </aside>

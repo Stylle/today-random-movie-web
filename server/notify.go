@@ -196,7 +196,7 @@ func (a *App) sendTelegramNotification(event string, movie Movie, scheduleID, ru
 	}
 	payload := a.botMoviePayload(cfg, revision, movie, filtersJSON)
 	payload["text"] = truncate(text, 1600)
-	if err := a.botCall(ctx, cfg.Token, "sendMessage", payload, nil); err != nil {
+	if err := a.sendMovieBotPayload(ctx, cfg.Token, payload); err != nil {
 		var apiErr movieBotError
 		if errors.As(err, &apiErr) {
 			status = apiErr.Code
