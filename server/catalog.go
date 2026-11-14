@@ -102,28 +102,30 @@ func (a *App) startSync() bool {
 	return true
 }
 
-func (a *App) runSync() {
-	finish := func(err error) {
+func (a *App) finishSync(err error) {
 
-		values := map[string]string{"last_sync_at": nowISO(), "last_sync_error": ""}
-		if err != nil {
-			values["last_sync_error"] = err.Error()
-		} else {
-			values["last_sync_success_at"] = nowISO()
-		}
-		a.updateSettings(values)
-		a.setSync(func(state *syncState) {
-			state.Running = false
-			state.FinishedAt = nowISO()
-			if err != nil {
-				state.Error = err.Error()
-				state.Stage = "同步失败"
-			} else {
-				state.Error = ""
-				state.Stage = "同步完成"
-			}
-		})
+	values := map[string]string{"last_sync_at": nowISO(), "last_sync_error": ""}
+	if err != nil {
+		values["last_sync_error"] = err.Error()
+	} else {
+		values["last_sync_success_at"] = nowISO()
 	}
+	a.updateSettings(values)
+	a.setSync(func(state *syncState) {
+		state.Running = false
+		state.FinishedAt = nowISO()
+		if err != nil {
+			state.Error = err.Error()
+			state.Stage = "同步失败"
+		} else {
+			state.Error = ""
+			state.Stage = "同步完成"
+		}
+	})
+}
+
+func (a *App) runSync() {
+	finish := a.finishSync
 	client, err := a.configuredClient()
 	if err != nil {
 		finish(err)

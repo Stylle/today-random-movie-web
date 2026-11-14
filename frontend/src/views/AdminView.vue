@@ -1,5 +1,6 @@
 <script setup>
 import '../draft-test.js'
+import { applySyncMetadata, currentSyncError } from '../sync-status.js'
 import BotBindingPanel from '../components/BotBindingPanel.vue'
 import BackupPanel from '../components/BackupPanel.vue'
 import PosterSettings from '../components/PosterSettings.vue'
@@ -129,7 +130,7 @@ function startPoll() {
       if (!sync.value.running) {
         clearInterval(poll)
         const latest = await api('/api/admin/settings')
-        Object.assign(settings.value, {lastSyncAt:latest.lastSyncAt,lastSyncSuccessAt:latest.lastSyncSuccessAt,lastSyncError:latest.lastSyncError})
+        applySyncMetadata(settings.value, latest)
         await Promise.all([loadConfig(), refreshHistory()])
         if (sync.value.error) flash(sync.value.error, true)
         else flash(`同步完成，共处理 ${sync.value.total || 0} 部影片`)
@@ -246,7 +247,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
           <div class="sync-action"><button class="primary" :disabled="sync.running" @click="startSync">{{ sync.running ? t('同步进行中…') : t('立即同步') }}</button><button class="ghost" @click="purgePosters">{{ t('清理封面缓存') }}</button></div>
           <div class="progress" v-if="sync.running"><div :style="{ width: sync.total ? `${sync.done / sync.total * 100}%` : '8%' }"></div></div>
           <p class="sync-state" v-if="sync.stage">{{ sync.stage }}<template v-if="sync.total"> · {{ sync.done }} / {{ sync.total }}</template></p>
-          <p class="inline-error" v-if="!sync.running && (sync.finishedAt ? sync.error : settings.lastSyncError)">{{ sync.finishedAt ? sync.error : settings.lastSyncError }}</p>
+          <p class="inline-error" v-if="currentSyncError(sync, settings)">{{ currentSyncError(sync, settings) }}</p>
         </div>
         <div class="panel">
           <div class="panel-title-row"><div><h3>{{ t('定时同步') }}</h3><small>{{ t('自动执行完整同步，更新新增影片、简介和已观看状态。') }}</small></div><span class="status-dot" :class="{ on: syncSchedule.enabled }">{{ syncSchedule.enabled ? t('已启用') : t('未启用') }}</span></div>
