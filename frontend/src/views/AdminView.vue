@@ -31,7 +31,7 @@ const history = ref({ random: [], webhooks: [] })
 const defaultFilters = ref({ libraries: [], genre: '', country: '', yearFrom: '', yearTo: '', excludeWatched: true })
 const telegram = ref({ enabled: false, chatId: '', token: '', hasToken: false, revision: '', lastError: '', lastReceived: '', customRange: false })
 const telegramLive = ref(false), bindingCommand = ref(''), bindingBot = ref('')
-const bindingDirty = computed(() => !!telegram.value.token.trim())
+const bindingDirty = computed(() => !!telegram.value.token.trim() || telegram.value.enabled !== telegramLive.value)
 let bindingExpiry = 0
 const message = ref('')
 const bad = ref(false)
@@ -128,6 +128,8 @@ function startPoll() {
       sync.value = await api('/api/admin/sync')
       if (!sync.value.running) {
         clearInterval(poll)
+        const latest = await api('/api/admin/settings')
+        Object.assign(settings.value, {lastSyncAt:latest.lastSyncAt,lastSyncSuccessAt:latest.lastSyncSuccessAt,lastSyncError:latest.lastSyncError})
         await Promise.all([loadConfig(), refreshHistory()])
         if (sync.value.error) flash(sync.value.error, true)
         else flash(`同步完成，共处理 ${sync.value.total || 0} 部影片`)
@@ -228,8 +230,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
  <BackupPanel v-if="tab === 'backup'" base="/api/admin" />
       <PosterSettings v-if="tab === 'sources'" :settings="settings" :sorted-providers="sortedProviders" :busy="busy" :poster-test="posterTest" @toggle="toggleProvider" @move="moveProvider" @save="savePosterSettings" @test="testPosterSettings" @refresh="refreshPosters" />
       <template v-if="tab === 'connection'">
-<p class="muted">{{ t('最近成功同步') }}：{{ settings.lastSyncSuccessAt ? new Date(settings.lastSyncSuccessAt).toLocaleString() : t('未记录') }}</p>
-        <div class="section-title"><div><span class="eyebrow">FNOS / FNTV</span><h1>{{ t('连接与同步') }}</h1><p>{{ t('凭据只在服务端加密保存，浏览器不会接触飞牛会话。') }}</p></div><span class="status-dot" :class="{ on: settings.lastSyncSuccessAt && !settings.lastSyncError }">{{ settings.lastSyncError ? t('上次尝试失败') : settings.lastSyncSuccessAt ? t('已同步') : t('未记录成功同步') }}</span></div>
+        <div class="section-title"><div><span class="eyebrow">FNOS / FNTV</span><h1>{{ t('连接与同步') }}</h1><p>{{ t('凭据只在服务端加密保存，浏览器不会接触飞牛会话。') }}</p></div></div>
         <div class="panel">
           <h3>{{ t('飞牛连接') }}</h3>
           <div class="field-grid">
@@ -245,7 +246,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
           <div class="sync-action"><button class="primary" :disabled="sync.running" @click="startSync">{{ sync.running ? t('同步进行中…') : t('立即同步') }}</button><button class="ghost" @click="purgePosters">{{ t('清理封面缓存') }}</button></div>
           <div class="progress" v-if="sync.running"><div :style="{ width: sync.total ? `${sync.done / sync.total * 100}%` : '8%' }"></div></div>
           <p class="sync-state" v-if="sync.stage">{{ sync.stage }}<template v-if="sync.total"> · {{ sync.done }} / {{ sync.total }}</template></p>
-          <p class="inline-error" v-if="settings.lastSyncError">{{ settings.lastSyncError }}</p>
+          <p class="inline-error" v-if="!sync.running && (sync.finishedAt ? sync.error : settings.lastSyncError)">{{ sync.finishedAt ? sync.error : settings.lastSyncError }}</p>
         </div>
         <div class="panel">
           <div class="panel-title-row"><div><h3>{{ t('定时同步') }}</h3><small>{{ t('自动执行完整同步，更新新增影片、简介和已观看状态。') }}</small></div><span class="status-dot" :class="{ on: syncSchedule.enabled }">{{ syncSchedule.enabled ? t('已启用') : t('未启用') }}</span></div>
@@ -277,7 +278,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
 
       <template v-if="tab === 'telegram'">
         <div class="section-title"><div><span class="eyebrow">TELEGRAM</span><h1>{{ t('机器人选片') }}</h1><p>{{ t('发送 getmovie 随机一部，发送 menu 设置范围。影片结果仅保留再随机与打开飞牛两个按钮。') }}</p></div></div>
-        <BotBindingPanel v-model="telegram.token" :configured="telegram.hasToken" :enabled="telegram.enabled" :bound="telegram.bound" :dirty="bindingDirty" :busy="!!busy" :bot="bindingBot" :command="bindingCommand" :error="telegram.lastError" @save="saveTelegram(true)" @generate="generateBinding" @unbind="unbindTelegram" @toggle="saveTelegram(!telegram.enabled)" />
+        <BotBindingPanel v-model="telegram.token" :configured="telegram.hasToken" :enabled="telegram.enabled" @update:enabled="telegram.enabled=$event" :bound="telegram.bound" :dirty="bindingDirty" :busy="!!busy" :bot="bindingBot" :command="bindingCommand" :error="telegram.lastError" @save="saveTelegram(telegram.enabled)" @generate="generateBinding" @unbind="unbindTelegram" @toggle="saveTelegram(!telegram.enabled)" />
       </template>
 
       <template v-if="tab === 'schedules'">
