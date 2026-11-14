@@ -1,4 +1,5 @@
 <script setup>
+import MoviePoster from '../components/MoviePoster.vue'
 import { t } from "./../i18n";
 import { computed, onMounted, ref } from 'vue'
 import { api, jsonBody } from '../api.js'
@@ -73,13 +74,13 @@ onMounted(async () => {
 
       <section class="movie-stage" :class="{ empty: !movie }">
         <template v-if="movie">
-          <div class="poster-wrap"><img :src="movie.posterUrl" :alt="movie.title" /><span v-if="movie.watched" class="watched-badge">{{ t('已看过') }}</span></div>
+          <div class="poster-wrap"><MoviePoster :movie="movie" /><span v-if="movie.watched" class="watched-badge">{{ t('已看过') }}</span></div>
           <div class="movie-copy">
             <span class="pick-label">TODAY'S MOVIE</span>
             <h2>{{ movie.title }}</h2>
             <p class="movie-meta">{{ metadata }}</p>
             <div class="tags"><span v-for="tag in movie.genres" :key="tag">{{ tag }}</span><span v-if="movie.rating" class="rating">★ {{ Number(movie.rating).toFixed(1) }}</span></div>
-            <p class="overview">{{ movie.overview || t('飞牛暂未提供这部影片的简介。或许，未知正是今晚最好的开场。') }}</p>
+            <p class="overview" :class="{ expanded: detailOpen }">{{ movie.overview || t('飞牛暂未提供这部影片的简介。或许，未知正是今晚最好的开场。') }}</p>
             <div class="hero-actions">
               <button class="primary large" @click="play">{{ t('▶ 开始播放') }}</button>
               <button class="ghost large" :disabled="busy" @click="pick">{{ busy ? t('正在挑选…') : t('↻ 换一部') }}</button>

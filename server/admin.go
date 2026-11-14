@@ -16,6 +16,15 @@ import (
 func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.Path
 	switch {
+	case p == "/api/admin/poster-settings" && r.Method == http.MethodPut:
+		a.savePosterSettings(w, r)
+	case p == "/api/admin/posters/test" && r.Method == http.MethodPost:
+		a.testPosterSettings(w, r)
+	case p == "/api/admin/posters/refresh" && r.Method == http.MethodPost:
+		a.updateSettings(map[string]string{"poster_revision": randomHex(8)})
+		respond(w, M{"ok": true})
+	case p == "/api/admin/backup" && r.Method == http.MethodGet, p == "/api/admin/restore" && r.Method == http.MethodPost:
+		a.backupRoute(w, r)
 	case p == "/api/admin/random-defaults" && r.Method == http.MethodPut:
 		filters, err := cleanDefaultFilters(readBody(r)["filters"])
 		if err != nil {
@@ -40,6 +49,7 @@ func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 		username, _ := openSealed(a.secret, s["fn_username"])
 		respond(w, M{
 			"fnServer": s["fn_server"], "fnUsername": username, "fnHasPassword": s["fn_password"] != "", "fnInsecureTls": truth(s["fn_insecure_tls"]),
+			"hasTmdbKey": s["poster_tmdb_key"] != "", "doubanEnabled": s["poster_douban_enabled"] != "0",
 			"lastSyncAt": s["last_sync_at"], "lastSyncError": s["last_sync_error"],
 		})
 	case p == "/api/admin/fnos" && r.Method == http.MethodPut:

@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
-	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,19 +41,22 @@ var countryNames = map[string]string{
 }
 
 type Movie struct {
-	ID        string   `json:"id"`
-	SourceID  string   `json:"-"`
-	Title     string   `json:"title"`
-	Year      string   `json:"year"`
-	Genres    []string `json:"genres"`
-	Countries []string `json:"countries"`
-	Overview  string   `json:"overview"`
-	CoverPath string   `json:"-"`
-	LibraryID string   `json:"libraryId"`
-	Library   string   `json:"library"`
-	Watched   bool     `json:"watched"`
-	Duration  string   `json:"duration"`
-	Rating    string   `json:"rating"`
+	TMDBID        string   `json:"-"`
+	DoubanID      string   `json:"-"`
+	ID            string   `json:"id"`
+	SourceID      string   `json:"-"`
+	Title         string   `json:"title"`
+	Year          string   `json:"year"`
+	Genres        []string `json:"genres"`
+	Countries     []string `json:"countries"`
+	Overview      string   `json:"overview"`
+	CoverPath     string   `json:"-"`
+	PosterSources []string `json:"-"`
+	LibraryID     string   `json:"libraryId"`
+	Library       string   `json:"library"`
+	Watched       bool     `json:"watched"`
+	Duration      string   `json:"duration"`
+	Rating        string   `json:"rating"`
 }
 
 type FnOSClient struct {
@@ -411,6 +413,7 @@ func (c *FnOSClient) Movies(ctx context.Context, progress func(done, total int))
 		out = append(out, Movie{
 			ID: id[:24], SourceID: guid, Title: fallback(str(first(item.item, "title", "name", "movieName")), "未命名影片"),
 			Year: year, Genres: genres, Countries: countries, Overview: str(first(merged, "overview", "description", "plot", "summary")),
+			PosterSources: externalPosters(merged), TMDBID: providerID(merged, "tmdb"), DoubanID: providerID(merged, "douban"),
 			CoverPath: coverReference(first(merged, "cover", "poster", "posters", "posterUrl", "image", "thumb")),
 			LibraryID: str(first(item.item, "libraryId", "library_id", "ancestor_guid", "sourceId")),
 			Library:   fallback(str(first(item.item, "libraryName", "library", "sourceName", "ancestor_name")), "未分类媒体库"),
@@ -474,49 +477,6 @@ func stringSlice(value any, numericNames map[int]string) []string {
 	return out
 }
 
-func (c *FnOSClient) CoverURL(reference string) (string, error) {
-	if reference == "" {
-		return "", fmt.Errorf("影片没有封面")
-	}
-	if u, err := url.Parse(reference); err == nil && u.IsAbs() {
-		if !strings.EqualFold(u.Hostname(), mustURL(c.server).Hostname()) {
-			return "", fmt.Errorf("封面地址不属于已配置的飞牛主机")
-		}
-		return u.String(), nil
-	}
-	clean := "/" + strings.TrimPrefix(reference, "/")
-	if strings.Contains(clean, "/sys/img/") {
-		return c.origin + clean, nil
-	}
-	return strings.TrimSuffix(c.apiBases[0], "/") + "/sys/img/" + strings.TrimPrefix(path.Clean(clean), "/"), nil
-}
-
-func mustURL(value string) *url.URL {
-	u, _ := url.Parse(value)
-	return u
-}
-
 func (c *FnOSClient) PlayURL(guid string) string {
 	return strings.TrimSuffix(c.webBase, "/") + "/video/" + url.PathEscape(guid)
-}
-
-func (c *FnOSClient) FetchCover(ctx context.Context, reference string) (*http.Response, error) {
-	rawURL, err := c.CoverURL(reference)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
-	req.Header.Set("User-Agent", fnUserAgent)
-	req.Header.Set("Referer", strings.TrimSuffix(c.webBase, "/")+"/")
-	if c.token != "" {
-		req.Header.Set("Authorization", c.token)
-		req.Header.Set("X-Trim-Client", "web")
-		req.Header.Set("X-Trim-Client-Version", fnClientVer)
-		req.Header.Set("authx", authx(http.MethodGet, rawURL, nil))
-	}
-	return c.client.Do(req)
 }

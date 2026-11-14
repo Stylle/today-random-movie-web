@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Stylle/today-random-movie-web/server/internal/portablebackup"
 	"io"
 	"log"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -30,6 +32,13 @@ type syncState struct {
 }
 
 type App struct {
+	posterMu      sync.Mutex
+	posterPending map[string]chan struct{}
+	posterSlots   chan struct{}
+	posterHTTP    *http.Client
+	jobs          sync.WaitGroup
+	restart       chan struct{}
+	restoring     atomic.Bool
 	db            *sql.DB
 	dataDir       string
 	webDir        string
@@ -37,7 +46,6 @@ type App struct {
 	writeMu       sync.Mutex
 	fnMu          sync.Mutex
 	fnClient      *FnOSClient
-	posterMu      sync.Mutex
 	syncMu        sync.Mutex
 	syncState     syncState
 	stop          chan struct{}
@@ -51,8 +59,14 @@ type App struct {
 }
 
 func newApp(dataDir, webDir string) *App {
+	must(os.MkdirAll(dataDir, 0750))
+	must(portablebackup.Apply(dataDir, backupSpec))
 	must(os.MkdirAll(filepath.Join(dataDir, "posters"), 0750))
-	a := &App{dataDir: dataDir, webDir: webDir, secret: loadSecret(dataDir), stop: make(chan struct{})}
+	a := &App{restart: make(chan struct{}), dataDir: dataDir, webDir: webDir, secret: loadSecret(dataDir), stop: make(chan struct{})}
+	a.posterPending = make(map[string]chan struct{})
+	a.posterSlots = make(chan struct{}, 4)
+	a.posterHTTP = restrictedClient("metadata", 8*time.Second)
+	a.posterHTTP.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	a.tgWake = make(chan struct{}, 1)
 	a.tgSendCancels = make(map[string]context.CancelFunc)
 	a.tgHTTP = &http.Client{Timeout: 70 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -95,6 +109,9 @@ func (a *App) recoverRequest(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer a.recoverRequest(w, r)
+	if a.restoring.Load() && r.URL.Path != "/api/health" {
+		fail(503, "系统正在恢复，请稍后重新登录")
+	}
 	if strings.HasPrefix(r.URL.Path, "/api/") {
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -153,6 +170,11 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	case p == "/api/random" && r.Method == http.MethodPost:
 		a.require(r)
 		a.randomMovieRoute(w, r)
+	case p == "/api/movie-posters" && r.Method == http.MethodGet:
+		a.require(r)
+		ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
+		defer cancel()
+		respond(w, a.resolvePosters(ctx, r.URL.Query().Get("id")))
 	case strings.HasPrefix(p, "/api/posters/") && r.Method == http.MethodGet:
 		a.require(r)
 		a.posterRoute(w, r)
@@ -167,9 +189,14 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const version = "0.7.2"
+const version = "0.8.0"
 
 func main() {
+	for runMain() {
+	}
+}
+
+func runMain() bool {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		client := http.Client{Timeout: 3 * time.Second}
 		resp, err := client.Get("http://127.0.0.1:" + env("PORT", "8080") + "/api/health")
@@ -177,22 +204,26 @@ func main() {
 			os.Exit(1)
 		}
 		resp.Body.Close()
-		return
+		return false
 	}
 	a := newApp(env("DATA_DIR", "../data"), env("WEB_DIR", "../frontend/dist"))
 	defer a.db.Close()
+	defer a.jobs.Wait()
 	if len(os.Args) > 1 && os.Args[1] == "admin-sync" {
 		must(a.syncAdminFromEnv())
 		log.Printf("管理员账号已从 USER/PASSWORD 重置")
-		return
+		return false
 	}
-	go a.schedulerLoop()
+	var workers sync.WaitGroup
+	workers.Add(1)
+	go func() { defer workers.Done(); a.schedulerLoop() }()
+	defer workers.Wait()
 	server := &http.Server{
 		Addr:              env("LISTEN_ADDR", ":"+env("PORT", "8080")),
 		Handler:           securityHeaders(a),
 		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      90 * time.Second,
+		ReadTimeout:       15 * time.Minute,
+		WriteTimeout:      15 * time.Minute,
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    32 << 10,
 	}
@@ -202,16 +233,29 @@ func main() {
 	telegram.Add(1)
 	go func() { defer telegram.Done(); a.telegramLoop(stop) }()
 	defer func() { done(); telegram.Wait() }()
+	shutdownDone := make(chan struct{})
 	go func() {
-		<-stop.Done()
+		defer close(shutdownDone)
+		select {
+		case <-stop.Done():
+		case <-a.restart:
+			done()
+		}
 		a.wakeMovieBot()
 		close(a.stop)
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		_ = server.Shutdown(ctx)
+		if a.restoring.Load() {
+			_ = server.Shutdown(context.Background())
+		} else {
+			_ = server.Shutdown(ctx)
+		}
 	}()
 	log.Printf("today-random-movie %s · data=%s · listen=%s", version, a.dataDir, server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(fmt.Errorf("listen: %w", err))
 	}
+
+	<-shutdownDone
+	return a.restoring.Load()
 }

@@ -111,6 +111,12 @@ func openDB(path string) *sql.DB {
 	must(err)
 	// Existing data folders are upgraded in place; historical rules/logs remain Webhook.
 	for _, migration := range []struct{ table, column, definition string }{
+		{"movies", "tmdb_id", "TEXT NOT NULL DEFAULT ''"},
+		{"movies", "douban_id", "TEXT NOT NULL DEFAULT ''"},
+		{"movies", "poster_checked_at", "INTEGER NOT NULL DEFAULT 0"},
+		{"movies", "poster_revision", "TEXT NOT NULL DEFAULT ''"},
+		{"movies", "poster_lookup_status", "TEXT NOT NULL DEFAULT ''"},
+		{"movies", "poster_sources", "TEXT NOT NULL DEFAULT '[]'"},
 		{"schedules", "notify_channel", "TEXT NOT NULL DEFAULT 'webhook'"},
 		{"webhook_logs", "channel", "TEXT NOT NULL DEFAULT 'webhook'"},
 	} {

@@ -1,4 +1,5 @@
 <script setup>
+import BackupPanel from '../components/BackupPanel.vue'
 import UiIcon from '../components/UiIcon.vue';
 import { t } from "./../i18n";
 import { computed, onUnmounted, ref, watch } from 'vue'
@@ -12,6 +13,7 @@ const tabs = [
   { id: 'telegram', label: 'Telegram 机器人', icon: '✈' },
   { id: 'schedules', label: '自动推送', icon: '◷' },
   { id: 'history', label: '运行记录', icon: '≡' },
+ { id: 'backup', label: '备份与恢复', icon: '↓' },
 ]
 const props = defineProps({ section: { type: String, default: 'connection' } })
 const tab = computed(() => props.section)
@@ -58,7 +60,7 @@ async function loadAll() {
     api('/api/movies/options'), api('/api/admin/sync'), api('/api/admin/sync-schedule'), api('/api/admin/history'),
     api('/api/admin/telegram'), api('/api/random/defaults'),
   ])
-  settings.value = { ...s, fnPassword: '' }
+  settings.value = { ...s, fnPassword: '', tmdbKey: '', clearTmdbKey: false }
   webhook.value = w
   schedules.value = rules.items
   options.value = opts
@@ -87,6 +89,18 @@ const testFn = () => run('test', async () => {
   const result = await api('/api/admin/fnos/test', { method: 'POST' })
   flash(`连接成功，读取到 ${result.libraries} 个电影媒体库`)
 })
+
+const posterTest = ref('')
+const savePosterSettings = () => run('poster-save', async () => {
+ const result = await api('/api/admin/poster-settings', { method: 'PUT', body: jsonBody({ tmdbKey: settings.value.tmdbKey, clearKey: settings.value.clearTmdbKey, doubanEnabled: settings.value.doubanEnabled }) })
+ settings.value.hasTmdbKey = result.hasTmdbKey; settings.value.tmdbKey = ''; settings.value.clearTmdbKey = false; posterTest.value = ''
+}, '封面设置已保存，返回影片页面即可自动补查，无需重新同步飞牛')
+const providerStatus = value => t(({ ok: '可用', unavailable: '连接失败或被限制', unauthorized: '认证失败或访问被限制', missing_key: '尚未配置密钥', not_found: '未匹配到影片', disabled: '已关闭' })[value] || '查询失败')
+const testPosterSettings = () => run('poster-test', async () => {
+ const result = await api('/api/admin/posters/test', { method: 'POST' })
+ posterTest.value = `豆瓣：${providerStatus(result.douban)}；TMDB：${providerStatus(result.tmdb)}`
+}, '封面来源检测完成')
+const refreshPosters = () => run('poster-refresh', () => api('/api/admin/posters/refresh', { method: 'POST' }), '已重置封面查询缓存，返回影片页面后自动重新查询')
 
 async function startSync() {
   try {
@@ -205,6 +219,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
 
 
     <section class="admin-content" v-if="settings">
+ <BackupPanel v-if="tab === 'backup'" base="/api/admin" />
       <template v-if="tab === 'connection'">
         <div class="section-title"><div><span class="eyebrow">FNOS / FNTV</span><h1>{{ t('连接与同步') }}</h1><p>{{ t('凭据只在服务端加密保存，浏览器不会接触飞牛会话。') }}</p></div><span class="status-dot" :class="{ on: settings.lastSyncAt }">{{ settings.lastSyncAt ? t('已同步') : t('未同步') }}</span></div>
         <div class="panel">
@@ -217,8 +232,20 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
           <label class="check-row warning-check"><input v-model="settings.fnInsecureTls" type="checkbox" /><span>{{ t('允许自签名 HTTPS 证书（仅可信内网 NAS）') }}</span></label>
           <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'fn'" @click="saveFn">{{ busy === 'fn' ? t('保存中…') : t('保存连接') }}</button><button class="ghost" :disabled="busy === 'test'" @click="testFn">{{ busy === 'test' ? t('测试中…') : t('测试连接') }}</button></div>
         </div>
+        <div class="panel poster-settings">
+          <h3>{{ t('封面来源') }}</h3>
+          <p class="muted">{{ t('影片信息来自飞牛；图片由当前设备依次尝试豆瓣、TMDB、已有缓存和占位图，不从飞牛下载图片。') }}</p>
+          <label class="check-row"><input v-model="settings.doubanEnabled" type="checkbox" /><span>{{ t('尝试查询豆瓣公开影片信息') }}</span></label>
+          <p class="muted small">{{ t('豆瓣公开入口可能限制访问，无法查询时会继续使用 TMDB；不需要填写豆瓣密钥。') }}</p>
+          <label class="field"><span>TMDB API Key / API Read Access Token</span><input v-model="settings.tmdbKey" type="password" autocomplete="new-password" :placeholder="settings.hasTmdbKey ? t('已保存；留空不修改') : t('填写 TMDB 密钥以启用备用封面查询')" /></label>
+          <small>{{ t('密钥仅在服务端加密保存，不发送给浏览器或图片站。') }} <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer">{{ t('获取 TMDB 密钥') }}</a></small>
+          <p v-if="!settings.hasTmdbKey" class="inline-error">{{ t('尚未配置 TMDB 密钥；豆瓣不可用且没有旧缓存时，只能显示占位图。') }}</p>
+          <label v-if="settings.hasTmdbKey" class="check-row"><input v-model="settings.clearTmdbKey" type="checkbox" /><span>{{ t('清除已保存的 TMDB 密钥') }}</span></label>
+          <div class="action-row"><button class="primary" :disabled="!!busy" @click="savePosterSettings">{{ t('保存封面设置') }}</button><button class="ghost" :disabled="!!busy" @click="testPosterSettings">{{ t('检测已保存的来源') }}</button><button class="ghost" :disabled="!!busy" @click="refreshPosters">{{ t('重新查询封面') }}</button></div>
+          <p v-if="posterTest" role="status">{{ posterTest }}</p>
+        </div>
         <div class="panel sync-panel">
-          <div><h3>{{ t('媒体库索引') }}</h3><p>{{ t('读取飞牛影片信息；封面在访问时缓存到 data/posters。') }}</p><small v-if="settings.lastSyncAt">{{ t('上次同步：') }}{{ new Date(settings.lastSyncAt).toLocaleString() }}</small></div>
+          <div><h3>{{ t('媒体库索引') }}</h3><p>{{ t('同步影片信息；缺失的外部封面地址会在访问影片时自动查询，无需重新同步影片列表。') }}</p><small v-if="settings.lastSyncAt">{{ t('上次同步：') }}{{ new Date(settings.lastSyncAt).toLocaleString() }}</small></div>
           <div class="sync-action"><button class="primary" :disabled="sync.running" @click="startSync">{{ sync.running ? t('同步进行中…') : t('立即同步') }}</button><button class="ghost" @click="purgePosters">{{ t('清理封面缓存') }}</button></div>
           <div class="progress" v-if="sync.running"><div :style="{ width: sync.total ? `${sync.done / sync.total * 100}%` : '8%' }"></div></div>
           <p class="sync-state" v-if="sync.stage">{{ sync.stage }}<template v-if="sync.total"> · {{ sync.done }} / {{ sync.total }}</template></p>

@@ -12,7 +12,7 @@ const routes = { today: HomeView, library: LibraryView, login: LoginView, admin:
 const management = [
   { id: 'connection', label: '连接与同步' }, { id: 'webhook', label: 'Webhook' },
   { id: 'telegram', label: 'Telegram 机器人' }, { id: 'schedules', label: '自动推送' },
-  { id: 'history', label: '运行记录' },
+  { id: 'history', label: '运行记录' }, { id: 'backup', label: '备份与恢复' },
 ]
 const route = ref('today'), adminSection = ref('connection'), navOpen = ref(false), bootError = ref('')
 const component = computed(() => routes[route.value] || HomeView)

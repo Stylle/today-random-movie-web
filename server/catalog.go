@@ -91,13 +91,14 @@ func (a *App) syncSnapshot() syncState {
 
 func (a *App) startSync() bool {
 	a.syncMu.Lock()
-	if a.syncState.Running {
+	if a.syncState.Running || a.restoring.Load() {
 		a.syncMu.Unlock()
 		return false
 	}
 	a.syncState = syncState{Running: true, StartedAt: nowISO(), Stage: "正在连接飞牛"}
 	a.syncMu.Unlock()
-	go a.runSync()
+	a.jobs.Add(1)
+	go func() { defer a.jobs.Done(); a.runSync() }()
 	return true
 }
 
@@ -146,10 +147,10 @@ func (a *App) runSync() {
 	}
 	marker := nowISO()
 	for _, movie := range movies {
-		_, err = tx.Exec(`INSERT INTO movies(id,source_id,title,year,genres,countries,overview,cover_path,library_id,library,watched,duration,rating,updated_at)
-			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-			ON CONFLICT(id) DO UPDATE SET source_id=excluded.source_id,title=excluded.title,year=excluded.year,genres=excluded.genres,countries=excluded.countries,overview=excluded.overview,cover_path=excluded.cover_path,library_id=excluded.library_id,library=excluded.library,watched=excluded.watched,duration=excluded.duration,rating=excluded.rating,updated_at=excluded.updated_at`,
-			movie.ID, movie.SourceID, movie.Title, movie.Year, jsonString(movie.Genres), jsonString(movie.Countries), movie.Overview, movie.CoverPath, movie.LibraryID, movie.Library, boolInt(movie.Watched), movie.Duration, movie.Rating, marker)
+		_, err = tx.Exec(`INSERT INTO movies(id,source_id,title,year,genres,countries,overview,cover_path,library_id,library,watched,duration,rating,updated_at,poster_sources,tmdb_id,douban_id)
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+			ON CONFLICT(id) DO UPDATE SET source_id=excluded.source_id,title=excluded.title,year=excluded.year,genres=excluded.genres,countries=excluded.countries,overview=excluded.overview,cover_path=excluded.cover_path,library_id=excluded.library_id,library=excluded.library,watched=excluded.watched,duration=excluded.duration,rating=excluded.rating,updated_at=excluded.updated_at,poster_sources=CASE WHEN excluded.poster_sources='[]' THEN movies.poster_sources ELSE excluded.poster_sources END,tmdb_id=excluded.tmdb_id,douban_id=excluded.douban_id,poster_checked_at=0`,
+			movie.ID, movie.SourceID, movie.Title, movie.Year, jsonString(movie.Genres), jsonString(movie.Countries), movie.Overview, movie.CoverPath, movie.LibraryID, movie.Library, boolInt(movie.Watched), movie.Duration, movie.Rating, marker, jsonString(movie.PosterSources), movie.TMDBID, movie.DoubanID)
 		if err != nil {
 			tx.Rollback()
 			finish(err)
@@ -174,11 +175,13 @@ func boolInt(value bool) int {
 
 func decodeMovie(row M) Movie {
 	genres, countries := []string{}, []string{}
+	posters := []string{}
+	_ = json.Unmarshal([]byte(str(row["poster_sources"])), &posters)
 	_ = json.Unmarshal([]byte(str(row["genres"])), &genres)
 	_ = json.Unmarshal([]byte(str(row["countries"])), &countries)
 	return Movie{
 		ID: str(row["id"]), SourceID: str(row["source_id"]), Title: str(row["title"]), Year: str(row["year"]), Genres: genres,
-		Countries: countries, Overview: str(row["overview"]), CoverPath: str(row["cover_path"]), LibraryID: str(row["library_id"]),
+		TMDBID: str(row["tmdb_id"]), DoubanID: str(row["douban_id"]), Countries: countries, PosterSources: posters, Overview: str(row["overview"]), CoverPath: str(row["cover_path"]), LibraryID: str(row["library_id"]),
 		Library: str(row["library"]), Watched: num(row["watched"]) != 0, Duration: str(row["duration"]), Rating: str(row["rating"]),
 	}
 }
@@ -187,7 +190,7 @@ func (a *App) movieJSON(movie Movie) M {
 	return M{
 		"id": movie.ID, "title": movie.Title, "year": movie.Year, "genres": movie.Genres, "countries": movie.Countries,
 		"overview": movie.Overview, "libraryId": movie.LibraryID, "library": movie.Library, "watched": movie.Watched,
-		"duration": movie.Duration, "rating": movie.Rating, "posterUrl": "/api/posters/" + movie.ID,
+		"duration": movie.Duration, "rating": movie.Rating, "posterUrl": "/api/posters/" + movie.ID + "?cache=only", "posterSources": externalPosters(M{"posters": movie.PosterSources, "cover": movie.CoverPath}),
 	}
 }
 
@@ -458,23 +461,10 @@ func (a *App) posterRoute(w http.ResponseWriter, r *http.Request) {
 	if id == "" || strings.ContainsAny(id, "/\\.") {
 		fail(404, "封面不存在")
 	}
-	row := a.one("SELECT cover_path,updated_at FROM movies WHERE id=?", id)
-	if row == nil || str(row["cover_path"]) == "" {
-		servePlaceholder(w, id)
-		return
+	if a.one("SELECT id FROM movies WHERE id=?", id) == nil {
+		fail(404, "封面不存在")
 	}
 	cachePath := filepath.Join(a.dataDir, "posters", id)
-	if _, err := os.Stat(cachePath); err != nil {
-		a.posterMu.Lock()
-		if _, secondErr := os.Stat(cachePath); secondErr != nil {
-			err = a.fetchPoster(cachePath, str(row["cover_path"]))
-		}
-		a.posterMu.Unlock()
-		if err != nil {
-			servePlaceholder(w, id)
-			return
-		}
-	}
 	file, err := os.Open(cachePath)
 	if err != nil {
 		servePlaceholder(w, id)
@@ -486,47 +476,9 @@ func (a *App) posterRoute(w http.ResponseWriter, r *http.Request) {
 	n, _ := file.Read(head)
 	_, _ = file.Seek(0, io.SeekStart)
 	w.Header().Set("Content-Type", http.DetectContentType(head[:n]))
-	w.Header().Set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800")
+	w.Header().Set("Cache-Control", "private, max-age=3600")
 	w.Header().Set("ETag", `"`+id+`-`+strconv.FormatInt(info.ModTime().Unix(), 10)+`"`)
 	http.ServeContent(w, r, id, info.ModTime(), file)
-}
-
-func (a *App) fetchPoster(target, fnReference string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
-	defer cancel()
-	client, err := a.configuredClient()
-	if err != nil {
-		return err
-	}
-	resp, err := client.FetchCover(ctx, fnReference)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("封面接口 HTTP %d", resp.StatusCode)
-	}
-	if resp.ContentLength > 15<<20 {
-		return fmt.Errorf("封面超过 15 MiB")
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(target), "poster-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	written, err := io.Copy(tmp, io.LimitReader(resp.Body, (15<<20)+1))
-	closeErr := tmp.Close()
-	if err != nil {
-		return err
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	if written > 15<<20 {
-		return fmt.Errorf("封面超过 15 MiB")
-	}
-	return os.Rename(tmpName, target)
 }
 
 func servePlaceholder(w http.ResponseWriter, seed string) {
@@ -534,7 +486,7 @@ func servePlaceholder(w http.ResponseWriter, seed string) {
 	color := colors[int(shaHex(seed)[0])%len(colors)]
 	svg := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600"><rect width="400" height="600" fill="` + color + `"/><circle cx="200" cy="245" r="70" fill="rgba(255,255,255,.12)"/><path d="M180 205l70 40-70 40z" fill="rgba(255,255,255,.8)"/><text x="200" y="410" fill="white" font-family="sans-serif" font-size="25" text-anchor="middle">今日想看</text></svg>`
 	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Header().Set("Cache-Control", "private, no-store")
 	_, _ = io.WriteString(w, svg)
 }
 
