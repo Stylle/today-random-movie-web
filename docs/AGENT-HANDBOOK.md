@@ -40,3 +40,7 @@ Docker Hub 发布凭据使用 DOCKERHUB_USERNAME、DOCKERHUB_TOKEN；GitHub Acti
 
 - 数据来源菜单允许豆瓣、TMDB、豆影、旧缓存排序与停用（0），占位图始终最后。豆影 Key 独立加密；额度持久化，至少间隔 6.1 秒，滚动 24 小时不超过 200 次，不能通过刷新查询或重启清零。
 - 中文菜单统一四字。Telegram 支持外部图片及旧缓存照片，失败退原文字和按钮；不下载飞牛封面，不自动向真实聊天发送测试消息。
+
+## 通知与测试约定
+
+配置权限、账户模型保持原样，不新增分用户配置。Telegram 使用保存 Token、一次性绑定码、私聊 /bind；不恢复手填 Chat ID 和测试发送按钮。绑定和启动后注册原有业务菜单。Webhook/飞牛直接测试当前草稿，不保存、不启用、空密钥只在服务端合并；保存与测试互斥并拒绝过期结果。共享模块及 Vue 面板按 shared-components.json 同步。详见 integration-tests.md。

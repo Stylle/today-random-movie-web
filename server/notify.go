@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bytes"
-	"context"
+	stdcontext "context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	probe "github.com/Stylle/today-random-movie-web/server/internal/integrationtest"
 	"log"
-	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -89,7 +87,10 @@ func (a *App) webhookContext(event string, movie Movie) M {
 
 func (a *App) sendWebhook(event string, movie Movie, scheduleID string) (ok bool, status int, message string) {
 	defer func() { a.logNotification("webhook", event, scheduleID, movie.ID, ok, status, message) }()
-	s := a.settings()
+	return a.sendWebhookSettings(event, movie, a.settings())
+}
+
+func (a *App) sendWebhookSettings(event string, movie Movie, s map[string]string) (ok bool, status int, message string) {
 	webhookURL := strings.TrimSpace(s["webhook_url"])
 	if webhookURL == "" {
 		return false, 0, "尚未配置 Webhook URL"
@@ -119,38 +120,24 @@ func (a *App) sendWebhook(event string, movie Movie, scheduleID string) (ok bool
 		}
 	}
 	method := fallback(s["webhook_method"], "POST")
-	var body io.Reader
-	if method != http.MethodGet {
-		body = bytes.NewReader(payload)
-	}
-	req, err := http.NewRequest(method, webhookURL, body)
-	if err != nil {
-		return false, 0, err.Error()
-	}
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("Accept", "*/*")
-	req.Header.Set("User-Agent", "today-random-movie/"+version)
+	headers := map[string]string{"Content-Type": contentType, "Accept": "*/*", "User-Agent": "today-random-movie/" + version}
 	if raw := s["webhook_headers"]; raw != "" {
-		headers := map[string]string{}
-		if err = json.Unmarshal([]byte(raw), &headers); err != nil {
+		var custom map[string]string
+		if json.Unmarshal([]byte(raw), &custom) != nil {
 			return false, 0, "自定义请求头不是合法 JSON"
 		}
-		for key, value := range headers {
-			req.Header.Set(key, value)
+		for k, v := range custom {
+			headers[k] = v
 		}
 	}
-	client := restrictedClient("webhook", 15*time.Second)
-	resp, err := client.Do(req)
+	ctx, cancel := stdcontext.WithTimeout(stdcontext.Background(), 15*time.Second)
+	defer cancel()
+	status, err := probe.Webhook(ctx, restrictedClient("webhook", 15*time.Second), method, webhookURL, headers, payload)
 	if err != nil {
-		return false, 0, err.Error()
+		return false, status, err.Error()
 	}
-	defer resp.Body.Close()
-	response, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		message := fmt.Sprintf("HTTP %d · %s", resp.StatusCode, truncate(string(response), 320))
-		return false, resp.StatusCode, message
-	}
-	return true, resp.StatusCode, ""
+	return true, status, ""
+
 }
 
 func (a *App) logNotification(channel, event, scheduleID, movieID string, ok bool, status int, message string) {
@@ -170,7 +157,7 @@ func (a *App) sendTelegramNotification(event string, movie Movie, scheduleID, ru
 		a.tgConfigMu.Unlock()
 		return false, 0, "请先在 Telegram 机器人设置中启用机器人并绑定私聊"
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := stdcontext.WithTimeout(stdcontext.Background(), 20*time.Second)
 	id := randomHex(8)
 	a.tgMu.Lock()
 	if len(a.tgSendCancels) >= 16 {

@@ -160,3 +160,7 @@ TMDB 配置说明：[应用认证](https://developer.themoviedb.org/docs/authent
 格式、共享组件、反向代理与平台验收见 [维护约定](https://github.com/Stylle/today-random-movie-web/blob/main/docs/MAINTENANCE.md)。升级前备份完整数据目录及应用密钥，保留原数据卷。
 
 密钥文件损坏或已有数据库缺失 secret.key 时服务会停止启动，避免覆盖原加密信息；请恢复匹配的完整备份。退出遇到网络错误会保留当前界面并提示重试，成功退出会撤销该账户所有网页会话。登录有账户与客户端组合限速，浏览器写请求需来自本站。
+
+## 通知配置
+
+Telegram（固件除外）：填写 Token、保存设置、生成绑定码，在机器人私聊发送 `/bind 绑定码`。五分钟有效、一次使用；无需 Chat ID 或测试消息。自动注册原有业务命令菜单。固件保留 Webhook/MQTT，取消 Telegram 通知。Webhook 和飞牛（如有）可直接测试当前表单，不会保存配置。原有用户和项目权限不变。

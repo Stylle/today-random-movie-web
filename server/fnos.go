@@ -152,6 +152,9 @@ func (c *FnOSClient) request(ctx context.Context, method, route string, payload 
 	}
 	var last error
 	for _, base := range c.apiBases {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		rawURL := strings.TrimSuffix(base, "/") + "/" + strings.TrimPrefix(route, "/")
 		var reader io.Reader
 		if body != nil {
@@ -187,7 +190,7 @@ func (c *FnOSClient) request(ctx context.Context, method, route string, payload 
 			continue
 		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			last = fmt.Errorf("飞牛接口 HTTP %d: %s", resp.StatusCode, truncate(string(data), 240))
+			last = fmt.Errorf("飞牛接口 HTTP %d，请检查服务地址、代理和访问权限", resp.StatusCode)
 			continue
 		}
 		if len(data) == 0 {
@@ -265,6 +268,9 @@ func (c *FnOSClient) Login(ctx context.Context) error {
 			{"account": c.username, "password": c.password},
 			{"loginName": c.username, "password": c.password},
 		} {
+			if ctx.Err() != nil {
+				return fmt.Errorf("飞牛登录超时，请检查应用容器到飞牛的网络、端口和代理")
+			}
 			result, err := c.request(ctx, http.MethodPost, route, payload)
 			if err != nil {
 				last = err

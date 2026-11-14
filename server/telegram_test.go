@@ -335,8 +335,8 @@ func TestMovieBotPollingAndCancellation(t *testing.T) {
 					Command string `json:"command"`
 				} `json:"commands"`
 			}
-			if err := json.NewDecoder(r.Body).Decode(&input); err != nil || len(input.Commands) != 2 || input.Commands[0].Command != "getmovie" || input.Commands[1].Command != "menu" {
-				t.Error("native commands must only contain getmovie and menu")
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil || len(input.Commands) != 2 || !((input.Commands[0].Command == "getmovie" && input.Commands[1].Command == "menu") || (input.Commands[0].Command == "start" && input.Commands[1].Command == "bind")) {
+				t.Error("unexpected public or bound command menu")
 			}
 			fmt.Fprint(w, `{"ok":true,"result":true}`)
 		default:

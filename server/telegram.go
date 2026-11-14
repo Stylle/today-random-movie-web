@@ -81,6 +81,7 @@ type movieBotInput struct {
 	Token    string `json:"token"`
 	ChatID   string `json:"chatId"`
 	Revision string `json:"revision"`
+	BindFlow bool   `json:"bindFlow"`
 }
 
 var movieBotToken = regexp.MustCompile(`^[0-9]{5,20}:[A-Za-z0-9_-]{20,100}$`)
@@ -109,7 +110,7 @@ func (a *App) telegramSettings(w http.ResponseWriter) {
 	var lastError, lastReceived string
 	a.db.QueryRow(`SELECT last_error,last_received FROM telegram_movie_config WHERE id=1`).Scan(&lastError, &lastReceived)
 	_, custom := a.botFilters(cfg.ChatID)
-	respond(w, M{"enabled": cfg.Enabled, "chatId": cfg.ChatID, "hasToken": cfg.Token != "", "revision": revision, "lastError": lastError, "lastReceived": lastReceived, "customRange": custom})
+	respond(w, M{"enabled": cfg.Enabled, "chatId": cfg.ChatID, "hasToken": cfg.Token != "", "revision": revision, "lastError": lastError, "lastReceived": lastReceived, "customRange": custom, "bound": cfg.ChatID != ""})
 }
 func (a *App) saveTelegram(w http.ResponseWriter, r *http.Request) {
 	var in movieBotInput
@@ -135,9 +136,16 @@ func (a *App) saveTelegram(w http.ResponseWriter, r *http.Request) {
 	if in.Token != "" && !movieBotToken.MatchString(in.Token) {
 		fail(400, "Bot Token 格式不正确")
 	}
+	if in.BindFlow {
+		if in.Token == previous.Token {
+			in.ChatID = previous.ChatID
+		} else {
+			in.ChatID = ""
+		}
+	}
 	if in.Enabled {
 		id, e := strconv.ParseInt(in.ChatID, 10, 64)
-		if e != nil || id <= 0 || strconv.FormatInt(id, 10) != in.ChatID {
+		if !in.BindFlow && (e != nil || id <= 0 || strconv.FormatInt(id, 10) != in.ChatID) {
 			fail(400, "请填写正整数私聊 Chat ID，不支持群聊")
 		}
 		if in.Token == "" {
@@ -163,6 +171,7 @@ func (a *App) saveTelegram(w http.ResponseWriter, r *http.Request) {
 	if err != nil || current != revision {
 		fail(409, "设置已改变，请刷新后保存")
 	}
+	a.botBinding.Clear()
 	a.wakeMovieBot()
 	tx, err := a.db.Begin()
 	must(err)
@@ -178,46 +187,6 @@ func (a *App) saveTelegram(w http.ResponseWriter, r *http.Request) {
 	must(tx.Commit())
 	a.wakeMovieBot()
 	respond(w, M{"ok": true})
-}
-func (a *App) testTelegram(w http.ResponseWriter, r *http.Request) {
-	v := readBody(r)
-	token := str(v["token"])
-	cfg, _, err := a.botConfig()
-	if err != nil {
-		fail(500, "机器人配置无法读取")
-	}
-	if token == "" {
-		token = cfg.Token
-	}
-	if !movieBotToken.MatchString(token) {
-		fail(400, "请填写有效的 Bot Token")
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
-	defer cancel()
-	username, err := a.checkMovieBot(ctx, token)
-	if err != nil {
-		fail(400, err.Error())
-	}
-	chats := []string{}
-	if cfg.Enabled && token == cfg.Token {
-		if cfg.ChatID != "" {
-			chats = append(chats, cfg.ChatID)
-		}
-	} else {
-		var updates []movieBotUpdate
-		if err = a.botCall(ctx, token, "getUpdates", M{"timeout": 0, "limit": 100, "allowed_updates": []string{"message", "callback_query"}}, &updates); err != nil {
-			fail(502, err.Error())
-		}
-		seen := map[int64]bool{}
-		for _, u := range updates {
-			m := u.Message
-			if m != nil && m.Chat.Type == "private" && m.Chat.ID > 0 && !m.From.Bot && !seen[m.Chat.ID] {
-				chats = append(chats, strconv.FormatInt(m.Chat.ID, 10))
-				seen[m.Chat.ID] = true
-			}
-		}
-	}
-	respond(w, M{"username": username, "chats": chats})
 }
 
 type movieBotError struct{ Code, Retry int }
@@ -412,10 +381,15 @@ func authorizedMovieUpdate(cfg movieBotConfig, u movieBotUpdate) bool {
 	return false
 }
 func (a *App) pollMovieBot(ctx context.Context, cfg movieBotConfig, revision string) {
+	a.registerMovieMenu(ctx, cfg, 0)
 	chatID, _ := strconv.ParseInt(cfg.ChatID, 10, 64)
 	commands := []M{{"command": "getmovie", "description": "按当前范围随机一部影片"}, {"command": "menu", "description": "设置分类、年份与观看范围"}}
-	_ = a.botCall(ctx, cfg.Token, "setMyCommands", M{"commands": commands, "scope": M{"type": "chat", "chat_id": chatID}}, nil)
-	_ = a.botCall(ctx, cfg.Token, "setChatMenuButton", M{"chat_id": chatID, "menu_button": M{"type": "commands"}}, nil)
+	if chatID > 0 {
+		_ = a.botCall(ctx, cfg.Token, "setMyCommands", M{"commands": commands, "scope": M{"type": "chat", "chat_id": chatID}}, nil)
+	}
+	if chatID > 0 {
+		_ = a.botCall(ctx, cfg.Token, "setChatMenuButton", M{"chat_id": chatID, "menu_button": M{"type": "commands"}}, nil)
+	}
 	for ctx.Err() == nil {
 		var next int64
 		if a.db.QueryRow(`SELECT next_update FROM telegram_movie_config WHERE revision=?`, revision).Scan(&next) != nil {
@@ -430,6 +404,9 @@ func (a *App) pollMovieBot(ctx context.Context, cfg movieBotConfig, revision str
 			for _, u := range updates {
 				if u.ID < next {
 					continue
+				}
+				if a.acceptMovieBinding(ctx, cfg, revision, u) {
+					return
 				}
 				if authorizedMovieUpdate(cfg, u) {
 					if u.Callback != nil {

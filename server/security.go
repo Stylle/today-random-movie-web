@@ -31,9 +31,21 @@ func validateTarget(rawURL string, mode string) (*url.URL, error) {
 	return u, nil
 }
 
+// Private FnOS addresses are reached directly; a public API proxy must not
+// turn a local NAS request into an upstream proxy request. Other integrations
+// retain their existing environment proxy configuration.
+func integrationProxy(r *http.Request, mode string, fallback func(*http.Request) (*url.URL, error)) (*url.URL, error) {
+	if mode == "fnos" {
+		if ip := net.ParseIP(r.URL.Hostname()); ip != nil && (ip.IsPrivate() || ip.IsLoopback()) {
+			return nil, nil
+		}
+	}
+	return fallback(r)
+}
+
 func restrictedClient(mode string, timeout time.Duration) *http.Client {
 	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
+		Proxy:                 func(r *http.Request) (*url.URL, error) { return integrationProxy(r, mode, http.ProxyFromEnvironment) },
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          24,
 		MaxIdleConnsPerHost:   12,

@@ -1,4 +1,6 @@
 <script setup>
+import '../draft-test.js'
+import BotBindingPanel from '../components/BotBindingPanel.vue'
 import BackupPanel from '../components/BackupPanel.vue'
 import PosterSettings from '../components/PosterSettings.vue'
 import UiIcon from '../components/UiIcon.vue';
@@ -28,9 +30,9 @@ const syncSchedule = ref({ enabled: false, kind: 'daily', time: '03:00', timezon
 const history = ref({ random: [], webhooks: [] })
 const defaultFilters = ref({ libraries: [], genre: '', country: '', yearFrom: '', yearTo: '', excludeWatched: true })
 const telegram = ref({ enabled: false, chatId: '', token: '', hasToken: false, revision: '', lastError: '', lastReceived: '', customRange: false })
-const telegramLive = ref(false)
-const telegramChats = ref([])
-const telegramNotice = ref('')
+const telegramLive = ref(false), bindingCommand = ref(''), bindingBot = ref('')
+const bindingDirty = computed(() => !!telegram.value.token.trim())
+let bindingExpiry = 0
 const message = ref('')
 const bad = ref(false)
 const busy = ref('')
@@ -77,10 +79,12 @@ async function loadAll() {
 }
 
 async function run(label, task, successMessage = '已保存并生效') {
+  if (busy.value) return
   busy.value = label
-  try { await task(); flash(successMessage) } catch (e) { flash(e.message, true) } finally { busy.value = '' }
+  try { await task(); if (successMessage) flash(successMessage) } catch (e) { flash(e.message, true) } finally { busy.value = '' }
 }
 
+const fnDraft = () => ({ server: settings.value.fnServer, username: settings.value.fnUsername, password: settings.value.fnPassword, insecureTls: settings.value.fnInsecureTls })
 const saveFn = () => run('fn', async () => {
   await api('/api/admin/fnos', { method: 'PUT', body: jsonBody({ server: settings.value.fnServer, username: settings.value.fnUsername, password: settings.value.fnPassword, insecureTls: settings.value.fnInsecureTls }) })
   settings.value.fnPassword = ''
@@ -88,9 +92,9 @@ const saveFn = () => run('fn', async () => {
 })
 
 const testFn = () => run('test', async () => {
-  const result = await api('/api/admin/fnos/test', { method: 'POST' })
-  flash(`连接成功，读取到 ${result.libraries} 个电影媒体库`)
-})
+  const result = await window.IntegrationDraft.run(fnDraft, draft => api('/api/admin/fnos/test', { method: 'POST', body: jsonBody(draft) }))
+  flash(`连接成功，读取到 ${result.libraries} 个电影媒体库（当前表单，未保存）`)
+}, null)
 
 const providerDefinitions=[{id:'douban',name:'豆瓣公开信息'},{id:'tmdb',name:'TMDB'},{id:'douying',name:'豆影 DoubanInfo'},{id:'cache',name:'已有缓存'},{id:'placeholder',name:'占位图'}]
 const sortedProviders=computed(()=>[...providerDefinitions].sort((a,b)=>(settings.value?.priorities[a.id]||99)-(settings.value?.priorities[b.id]||99)))
@@ -136,19 +140,13 @@ const saveWebhook = () => run('webhook', () => api('/api/admin/webhook', { metho
 const saveSyncSchedule = () => run('sync-schedule', async () => {
   syncSchedule.value = await api('/api/admin/sync-schedule', { method: 'PUT', body: jsonBody(syncSchedule.value) })
 })
-const testWebhook = () => run('webhook-test', async () => { await api('/api/admin/webhook/test', { method: 'POST' }); flash('测试消息已发送') })
-const saveTelegram = () => run('telegram', async () => {
-  await api('/api/admin/telegram', { method: 'PUT', body: jsonBody({ enabled: telegram.value.enabled, token: telegram.value.token.trim(), chatId: telegram.value.chatId.trim(), revision: telegram.value.revision }) })
-  telegram.value = { ...await api('/api/admin/telegram'), token: '' }
-  telegramLive.value = !!telegram.value.enabled
+const testWebhook = () => run('webhook-test', async () => { await window.IntegrationDraft.run(() => webhook.value, draft => api('/api/admin/webhook/test', { method: 'POST', body: jsonBody(draft) })); flash('当前表单测试消息已发送，配置未保存') }, null)
+const saveTelegram = (enabled = true) => run('telegram', async () => {
+ await api('/api/admin/telegram',{method:'PUT',body:jsonBody({enabled,token:telegram.value.token.trim(),revision:telegram.value.revision,bindFlow:true})})
+ telegram.value={...await api('/api/admin/telegram'),token:''};telegramLive.value=!!telegram.value.enabled;bindingCommand.value=''
 })
-const testTelegram = () => run('telegram-test', async () => {
-  const result = await api('/api/admin/telegram/test', { method: 'POST', body: jsonBody({ token: telegram.value.token.trim() }) })
-  telegramChats.value = result.chats || []
-  if (telegramChats.value.length === 1) telegram.value.chatId = telegramChats.value[0]
-  telegramNotice.value = telegramChats.value.length ? '连接正常，已检测到私聊 ID，请核对后保存。' : `连接正常。请向 @${result.username || '你的机器人'} 发送 /start 后重新检测；启用期间仅显示已绑定 ID。`
-})
-const sendTelegramTest = () => run('telegram-send-test', () => api('/api/admin/telegram/send-test', { method: 'POST' }), '测试通知已发送到绑定的私聊')
+const generateBinding = () => run('telegram-bind',async()=>{const result=await api('/api/admin/telegram/pair',{method:'POST'});bindingCommand.value=result.command;bindingBot.value=result.bot;bindingExpiry=Date.now()+result.expiresIn*1000},null)
+const unbindTelegram = () => run('telegram-unbind',async()=>{await api('/api/admin/telegram/unbind',{method:'POST'});telegram.value={...await api('/api/admin/telegram'),token:''};bindingCommand.value=''},'已解除绑定')
 const saveDefaultFilters = () => run('default-filters', async () => {
   const result = await api('/api/admin/random-defaults', { method: 'PUT', body: jsonBody({ filters: defaultFilters.value }) })
   defaultFilters.value = result.filters
@@ -158,7 +156,8 @@ const telegramPoll = setInterval(async () => {
   try {
     const result = await api('/api/admin/telegram')
     telegramLive.value = !!result.enabled
-    Object.assign(telegram.value, { lastError: result.lastError, lastReceived: result.lastReceived, customRange: result.customRange })
+    if(result.revision!==telegram.value.revision || (bindingExpiry && Date.now()>=bindingExpiry)) bindingCommand.value=''
+    Object.assign(telegram.value, { revision:result.revision, lastError: result.lastError, lastReceived: result.lastReceived, customRange: result.customRange, bound:result.bound, chatId:result.chatId })
   } catch (_) {}
 }, 15000)
 function editRule(rule = null) {
@@ -229,7 +228,8 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
  <BackupPanel v-if="tab === 'backup'" base="/api/admin" />
       <PosterSettings v-if="tab === 'sources'" :settings="settings" :sorted-providers="sortedProviders" :busy="busy" :poster-test="posterTest" @toggle="toggleProvider" @move="moveProvider" @save="savePosterSettings" @test="testPosterSettings" @refresh="refreshPosters" />
       <template v-if="tab === 'connection'">
-        <div class="section-title"><div><span class="eyebrow">FNOS / FNTV</span><h1>{{ t('连接与同步') }}</h1><p>{{ t('凭据只在服务端加密保存，浏览器不会接触飞牛会话。') }}</p></div><span class="status-dot" :class="{ on: settings.lastSyncAt }">{{ settings.lastSyncAt ? t('已同步') : t('未同步') }}</span></div>
+<p class="muted">{{ t('最近成功同步') }}：{{ settings.lastSyncSuccessAt ? new Date(settings.lastSyncSuccessAt).toLocaleString() : t('未记录') }}</p>
+        <div class="section-title"><div><span class="eyebrow">FNOS / FNTV</span><h1>{{ t('连接与同步') }}</h1><p>{{ t('凭据只在服务端加密保存，浏览器不会接触飞牛会话。') }}</p></div><span class="status-dot" :class="{ on: settings.lastSyncSuccessAt && !settings.lastSyncError }">{{ settings.lastSyncError ? t('上次尝试失败') : settings.lastSyncSuccessAt ? t('已同步') : t('未记录成功同步') }}</span></div>
         <div class="panel">
           <h3>{{ t('飞牛连接') }}</h3>
           <div class="field-grid">
@@ -238,10 +238,10 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
             <label class="field"><span>{{ t('密码') }}</span><input v-model="settings.fnPassword" type="password" :placeholder="settings.fnHasPassword ? t('已保存；留空不修改') : t('飞牛密码')" autocomplete="new-password" /></label>
           </div>
           <label class="check-row warning-check"><input v-model="settings.fnInsecureTls" type="checkbox" /><span>{{ t('允许自签名 HTTPS 证书（仅可信内网 NAS）') }}</span></label>
-          <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'fn'" @click="saveFn">{{ busy === 'fn' ? t('保存中…') : t('保存连接') }}</button><button class="ghost" :disabled="busy === 'test'" @click="testFn">{{ busy === 'test' ? t('测试中…') : t('测试连接') }}</button></div>
+          <p class="muted">{{ t('测试使用当前表单，不会保存或启用配置；密钥留空沿用已保存的密钥。') }}</p><div class="action-row form-actions-sticky"><button class="primary" :disabled="!!busy" @click="saveFn">{{ busy === 'fn' ? t('保存中…') : t('保存连接') }}</button><button class="ghost" :disabled="!!busy" @click="testFn">{{ busy === 'test' ? t('测试中…') : t('测试连接') }}</button></div>
         </div>
         <div class="panel sync-panel">
-          <div><h3>{{ t('媒体库索引') }}</h3><p>{{ t('同步影片信息；缺失的外部封面地址会在访问影片时自动查询，无需重新同步影片列表。') }}</p><small v-if="settings.lastSyncAt">{{ t('上次同步：') }}{{ new Date(settings.lastSyncAt).toLocaleString() }}</small></div>
+          <div><h3>{{ t('媒体库索引') }}</h3><p>{{ t('同步影片信息；缺失的外部封面地址会在访问影片时自动查询，无需重新同步影片列表。') }}</p><small v-if="settings.lastSyncAt">{{ t('上次尝试：') }}{{ new Date(settings.lastSyncAt).toLocaleString() }}</small></div>
           <div class="sync-action"><button class="primary" :disabled="sync.running" @click="startSync">{{ sync.running ? t('同步进行中…') : t('立即同步') }}</button><button class="ghost" @click="purgePosters">{{ t('清理封面缓存') }}</button></div>
           <div class="progress" v-if="sync.running"><div :style="{ width: sync.total ? `${sync.done / sync.total * 100}%` : '8%' }"></div></div>
           <p class="sync-state" v-if="sync.stage">{{ sync.stage }}<template v-if="sync.total"> · {{ sync.done }} / {{ sync.total }}</template></p>
@@ -257,7 +257,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
           </div>
           <label class="check-row"><input v-model="syncSchedule.enabled" type="checkbox" /><span>{{ t('启用定时同步') }}</span></label>
           <small v-if="syncSchedule.lastRunAt" class="schedule-last-run">{{ t('上次自动触发：') }}{{ new Date(syncSchedule.lastRunAt).toLocaleString() }}</small>
-          <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'sync-schedule'" @click="saveSyncSchedule">{{ busy === 'sync-schedule' ? t('保存中…') : t('保存同步规则') }}</button></div>
+          <div class="action-row form-actions-sticky"><button class="primary" :disabled="!!busy" @click="saveSyncSchedule">{{ busy === 'sync-schedule' ? t('保存中…') : t('保存同步规则') }}</button></div>
         </div>
       </template>
 
@@ -271,36 +271,19 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
             <label class="field span-2"><span>{{ t('自定义请求头（JSON）') }}</span><textarea v-model="webhook.headers" rows="3" placeholder='{"Authorization":"Bearer ..."}'></textarea></label>
             <label class="field span-2"><span>{{ t('正文模板（留空使用内置格式）') }}</span><textarea v-model="webhook.bodyTemplate" rows="8" :placeholder="webhookPlaceholder"></textarea><small v-pre>{{ t('变量：{{title}} {{text}} {{movie}} {{year}} {{genres}} {{rating}} {{fields}}') }}</small></label>
           </div>
-          <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'webhook'" @click="saveWebhook">{{ busy === 'webhook' ? t('保存中…') : t('保存 Webhook') }}</button><button class="ghost" :disabled="busy === 'webhook-test' || !webhook.url" @click="testWebhook">{{ busy === 'webhook-test' ? t('发送中…') : t('发送测试') }}</button></div>
+          <div class="action-row form-actions-sticky"><button class="primary" :disabled="!!busy" @click="saveWebhook">{{ busy === 'webhook' ? t('保存中…') : t('保存 Webhook') }}</button><button class="ghost" :disabled="!!busy || !webhook.url" @click="testWebhook">{{ busy === 'webhook-test' ? t('发送中…') : t('发送测试') }}</button></div>
         </div>
       </template>
 
       <template v-if="tab === 'telegram'">
         <div class="section-title"><div><span class="eyebrow">TELEGRAM</span><h1>{{ t('机器人选片') }}</h1><p>{{ t('发送 getmovie 随机一部，发送 menu 设置范围。影片结果仅保留再随机与打开飞牛两个按钮。') }}</p></div></div>
-        <div class="panel">
-          <label class="check-row"><input v-model="telegram.enabled" type="checkbox" /><span>{{ t('启用 Telegram 机器人（默认关闭）') }}</span></label>
-          <div class="field-grid">
-            <label class="field span-2"><span>Bot Token</span><input v-model="telegram.token" type="password" autocomplete="new-password" :placeholder="telegram.hasToken ? t('Token 已加密保存；留空保持不变') : t('从 @BotFather 获取专用机器人 Token')" /></label>
-            <label class="field"><span>{{ t('允许的私聊 Chat ID') }}</span><input v-model="telegram.chatId" inputmode="numeric" :placeholder="t('先私聊机器人发送 /start，再检测')" /></label>
-            <label v-if="telegramChats.length" class="field"><span>{{ t('检测到的私聊') }}</span><select v-model="telegram.chatId"><option value="">{{ t('请核对选择') }}</option><option v-for="id in telegramChats" :key="id" :value="id">{{ id }}</option></select></label>
-          </div>
-          <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'telegram'" @click="saveTelegram">{{ busy === 'telegram' ? t('保存中…') : t('保存机器人设置') }}</button><button class="ghost" :disabled="busy === 'telegram-test'" @click="testTelegram">{{ t('检测连接 / 识别私聊 ID') }}</button><button class="ghost" :disabled="busy === 'telegram-send-test' || !telegramLive" @click="sendTelegramTest">{{ t('发送测试通知') }}</button></div>
-          <p v-if="telegramNotice" class="muted">{{ telegramNotice }}</p>
-          <p class="muted">{{ telegramLive ? t('已启用') : t('已关闭') }} {{ t('· TG 范围：') }}{{ telegram.customRange ? t('自定义（在机器人菜单中恢复默认）') : t('跟随后台默认') }}<span v-if="telegram.lastReceived"> {{ t('· 最近处理') }} {{ new Date(telegram.lastReceived).toLocaleString() }}</span></p>
-          <p v-if="telegram.lastError" class="inline-error">{{ telegram.lastError }}</p>
-          <p class="muted">{{ t('只响应指定私聊，不开放给其他人或群聊；无需公网回调。请为本项目创建独立机器人，不与随手传等服务共用 Token。机器人聊天不是端到端加密；推荐详情和飞牛链接会交给 Telegram 保存。') }}</p>
-        </div>
-        <div class="panel">
-          <h3>{{ t('默认随机范围') }}</h3><p class="muted">{{ t('网站首次进入、TG 默认范围和新建推送规则共用此设置；初始为全部分类、排除已观看。TG 菜单自定义不会修改这里，已有推送规则也不会被覆盖。') }}</p>
-          <FilterPanel v-model="defaultFilters" :options="options" compact />
-          <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'default-filters'" @click="saveDefaultFilters">{{ t('保存默认范围') }}</button></div>
-        </div>
+        <BotBindingPanel v-model="telegram.token" :configured="telegram.hasToken" :enabled="telegram.enabled" :bound="telegram.bound" :dirty="bindingDirty" :busy="!!busy" :bot="bindingBot" :command="bindingCommand" :error="telegram.lastError" @save="saveTelegram(true)" @generate="generateBinding" @unbind="unbindTelegram" @toggle="saveTelegram(!telegram.enabled)" />
       </template>
 
       <template v-if="tab === 'schedules'">
         <div class="section-title"><div><span class="eyebrow">BUILT-IN CRON</span><h1>{{ t('自动推送') }}</h1><p>{{ t('应用内置调度器，无需在宿主机维护 crontab。') }}</p></div></div>
         <div class="schedule-grid">
-          <article class="rule-card" v-for="rule in schedules" :key="rule.id" :class="{ off: !rule.enabled }"><div class="rule-head"><span class="rule-icon">◷</span><span class="status-dot on" v-if="rule.enabled">{{ t('启用') }}</span><span class="status-dot" v-else>{{ t('停用') }}</span></div><h3>{{ rule.name }}</h3><p>{{ ruleSummary(rule) }}</p><p>{{ channelLabel(rule.notifyChannel) }}</p><small v-if="rule.lastRunAt">{{ t('上次：') }}{{ new Date(rule.lastRunAt).toLocaleString() }}</small><div class="rule-actions"><button class="text-btn" :disabled="busy === 'schedule-run'" @click="runRule(rule.id)">{{ t('立即运行') }}</button><button class="text-btn" @click="editRule(rule)">{{ t('编辑') }}</button><button class="text-btn danger-text" @click="removeRule(rule.id)">{{ t('删除') }}</button></div></article>
+          <article class="rule-card" v-for="rule in schedules" :key="rule.id" :class="{ off: !rule.enabled }"><div class="rule-head"><span class="rule-icon">◷</span><span class="status-dot on" v-if="rule.enabled">{{ t('启用') }}</span><span class="status-dot" v-else>{{ t('停用') }}</span></div><h3>{{ rule.name }}</h3><p>{{ ruleSummary(rule) }}</p><p>{{ channelLabel(rule.notifyChannel) }}</p><small v-if="rule.lastRunAt">{{ t('上次：') }}{{ new Date(rule.lastRunAt).toLocaleString() }}</small><div class="rule-actions"><button class="text-btn" :disabled="!!busy" @click="runRule(rule.id)">{{ t('立即运行') }}</button><button class="text-btn" @click="editRule(rule)">{{ t('编辑') }}</button><button class="text-btn danger-text" @click="removeRule(rule.id)">{{ t('删除') }}</button></div></article>
           <button class="rule-card add-rule" @click="editRule()"><span>＋</span><b>{{ t('新建推送规则') }}</b><small>{{ t('每日、每周或每月') }}</small></button>
         </div>
         <div class="panel rule-editor">
@@ -317,7 +300,7 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
           <p v-if="scheduleForm.notifyChannel !== 'webhook' && !telegramLive" class="inline-error">{{ t('机器人尚未启用。可以先保存规则，但运行前请配置并启用 Telegram 机器人。') }}</p>
           <label class="check-row"><input v-model="scheduleForm.enabled" type="checkbox" /><span>{{ t('启用这条规则') }}</span></label>
           <FilterPanel v-model="scheduleForm.filters" :options="options" compact />
-          <div class="action-row form-actions-sticky"><button class="primary" :disabled="busy === 'schedule'" @click="saveRule">{{ busy === 'schedule' ? t('保存中…') : editing ? t('保存修改') : t('创建规则') }}</button><button v-if="editing" class="ghost" @click="editRule()">{{ t('取消编辑') }}</button></div>
+          <div class="action-row form-actions-sticky"><button class="primary" :disabled="!!busy" @click="saveRule">{{ busy === 'schedule' ? t('保存中…') : editing ? t('保存修改') : t('创建规则') }}</button><button v-if="editing" class="ghost" @click="editRule()">{{ t('取消编辑') }}</button></div>
         </div>
       </template>
 

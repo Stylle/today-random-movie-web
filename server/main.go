@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	probe "github.com/Stylle/today-random-movie-web/server/internal/integrationtest"
 	"github.com/Stylle/today-random-movie-web/server/internal/portablebackup"
 	"io"
 	"log"
@@ -32,6 +33,7 @@ type syncState struct {
 }
 
 type App struct {
+	botBinding    probe.Binding
 	credentialMu  sync.Mutex
 	loginGate     loginGate
 	posterMu      sync.Mutex
@@ -198,7 +200,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const version = "0.11.0"
+const version = "0.12.0"
 
 func main() {
 	for runMain() {

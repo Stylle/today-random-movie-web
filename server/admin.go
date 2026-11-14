@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -36,21 +35,19 @@ func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 		a.telegramSettings(w)
 	case p == "/api/admin/telegram" && r.Method == http.MethodPut:
 		a.saveTelegram(w, r)
-	case p == "/api/admin/telegram/test" && r.Method == http.MethodPost:
-		a.testTelegram(w, r)
-	case p == "/api/admin/telegram/send-test" && r.Method == http.MethodPost:
-		ok, _, message := a.sendTelegramNotification("test", Movie{Title: "Telegram 测试影片", Year: "2026", Genres: []string{"剧情"}, Rating: "8.6"}, "", "")
-		if !ok {
-			fail(502, message)
-		}
-		respond(w, M{"ok": true})
+	case (p == "/api/admin/telegram/pair" || p == "/api/admin/telegram/unbind") && r.Method == http.MethodPost:
+		a.movieBindingRoute(w, r)
 	case p == "/api/admin/settings" && r.Method == http.MethodGet:
 		s := a.settings()
 		username, _ := openSealed(a.secret, s["fn_username"])
+		successAt := s["last_sync_success_at"]
+		if successAt == "" && s["last_sync_error"] == "" {
+			successAt = s["last_sync_at"]
+		}
 		respond(w, M{
 			"fnServer": s["fn_server"], "fnUsername": username, "fnHasPassword": s["fn_password"] != "", "fnInsecureTls": truth(s["fn_insecure_tls"]),
 			"hasTmdbKey": s["poster_tmdb_key"] != "", "hasDouyingKey": s["poster_douying_key"] != "", "priorities": posterPriorities(s), "doubanEnabled": s["poster_douban_enabled"] != "0",
-			"lastSyncAt": s["last_sync_at"], "lastSyncError": s["last_sync_error"],
+			"lastSyncSuccessAt": successAt, "lastSyncAt": s["last_sync_at"], "lastSyncError": s["last_sync_error"],
 		})
 	case p == "/api/admin/fnos" && r.Method == http.MethodPut:
 		v := readBody(r)
@@ -75,17 +72,7 @@ func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 		a.resetClient()
 		respond(w, M{"ok": true})
 	case p == "/api/admin/fnos/test" && r.Method == http.MethodPost:
-		client, err := a.configuredClient()
-		if err != nil {
-			fail(400, err.Error())
-		}
-		ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
-		defer cancel()
-		libraries, err := client.Libraries(ctx)
-		if err != nil {
-			fail(502, err.Error())
-		}
-		respond(w, M{"ok": true, "libraries": len(libraries)})
+		a.testFnOSDraft(w, r)
 	case p == "/api/admin/sync" && r.Method == http.MethodPost:
 		if !a.startSync() {
 			fail(409, "同步任务正在运行")
@@ -150,11 +137,7 @@ func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 		a.updateSettings(map[string]string{"webhook_url": urlValue, "webhook_method": method, "webhook_body_type": bodyType, "webhook_headers": headers, "webhook_body_tpl": template})
 		respond(w, M{"ok": true})
 	case p == "/api/admin/webhook/test" && r.Method == http.MethodPost:
-		ok, status, err := a.sendWebhook("test", Movie{Title: "Webhook 测试影片", Year: "2026", Genres: []string{"剧情"}, Rating: "8.6"}, "")
-		if !ok {
-			fail(502, err)
-		}
-		respond(w, M{"ok": true, "status": status})
+		a.testWebhookDraft(w, r)
 	case p == "/api/admin/schedules" && r.Method == http.MethodGet:
 		items := []M{}
 		for _, row := range a.rows("SELECT * FROM schedules ORDER BY created_at") {

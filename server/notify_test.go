@@ -172,18 +172,14 @@ func TestTelegramRuleDisabledAndTestNotification(t *testing.T) {
 	if movieBotReq(a, nil, "POST", "/api/admin/telegram/send-test", nil).Code != 401 {
 		t.Fatal("public test endpoint")
 	}
-	movieBotMock(t, a, func(w http.ResponseWriter, r *http.Request, method string) {
-		fmt.Fprint(w, `{"ok":true,"result":{"message_id":1}}`)
-	})
-	enableMovieBot(t, a, cookie)
-	movieBotJSON(t, movieBotReq(a, cookie, "POST", "/api/admin/telegram/send-test", nil))
-	if a.count("SELECT COUNT(*) FROM webhook_logs WHERE channel='telegram' AND event='test' AND ok=1") != 1 {
-		t.Fatal("test delivery not logged")
+	if movieBotReq(a, cookie, "POST", "/api/admin/telegram/send-test", nil).Code != 404 {
+		t.Fatal("obsolete test endpoint retained")
 	}
 	history := movieBotJSON(t, movieBotReq(a, cookie, "GET", "/api/admin/history", nil))
-	if len(history["notifications"].([]any)) != 2 || len(history["webhooks"].([]any)) != 2 {
-		t.Fatal("history API missing new or legacy results")
+	if len(history["notifications"].([]any)) != 1 || len(history["webhooks"].([]any)) != 1 {
+		t.Fatal("history API lost channel result")
 	}
+
 }
 
 func TestAutomaticTelegramRuleClaimsPeriodOnce(t *testing.T) {

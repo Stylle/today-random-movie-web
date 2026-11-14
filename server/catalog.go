@@ -117,6 +117,8 @@ func (a *App) runSync() {
 		values := map[string]string{"last_sync_at": nowISO(), "last_sync_error": ""}
 		if err != nil {
 			values["last_sync_error"] = err.Error()
+		} else {
+			values["last_sync_success_at"] = nowISO()
 		}
 		a.updateSettings(values)
 	}
