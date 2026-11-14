@@ -64,7 +64,7 @@
       "version": "2026-11-15",
       "source": "frontend/src/components/BotBindingPanel.vue",
       "mirrors": [],
-      "sha256": "390437a5b0ac95e8d7ef242dfd9b9351f6a666591ef0dcb4d2f40e20ab00931f"
+      "sha256": "ea83e2e322b4ae713a67a93d44e5cbe595d90ddfa06806a3a30b978bd3c4cb72"
     }
   ]
 }
