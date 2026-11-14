@@ -1,6 +1,6 @@
 module github.com/Stylle/today-random-movie-web/server
 
-go 1.26.0
+go 1.26.11
 
 require modernc.org/sqlite v1.61.0
 
