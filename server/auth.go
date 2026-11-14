@@ -112,7 +112,37 @@ func publicUser(user M) M {
 }
 
 func (a *App) authRoute(w http.ResponseWriter, r *http.Request) {
+	a.credentialMu.Lock()
+	defer a.credentialMu.Unlock()
 	switch r.URL.Path {
+	case "/api/auth/password":
+		if r.Method != http.MethodPost {
+			fail(405, "method not allowed")
+		}
+		ctx := a.require(r)
+		if !a.loginGate.allow(r, "password:"+str(ctx.user["id"])) {
+			fail(429, "尝试次数过多，请稍后重试")
+		}
+		v := readBody(r)
+		current, next := str(v["currentPassword"]), str(v["newPassword"])
+		if len([]rune(next)) < 8 || len(next) > 256 || next == current {
+			fail(400, "新密码至少 8 位、最多 256 字节，且不能与原密码相同")
+		}
+		row := a.one("SELECT pwd FROM users WHERE id=?", ctx.user["id"])
+		if row == nil || len(current) > 256 || !verifyPassword(current, str(row["pwd"])) {
+			fail(403, "当前密码不正确")
+		}
+		hash := password(next)
+		tx, err := a.db.Begin()
+		must(err)
+		defer tx.Rollback()
+		_, err = tx.Exec("UPDATE users SET pwd=? WHERE id=?", hash, ctx.user["id"])
+		must(err)
+		_, err = tx.Exec("DELETE FROM sessions WHERE user_id=?", ctx.user["id"])
+		must(err)
+		must(tx.Commit())
+		clearSessionCookie(w, r)
+		respond(w, M{"ok": true, "reauthenticate": true})
 	case "/api/auth/login":
 		if r.Method != http.MethodPost {
 			fail(405, "method not allowed")

@@ -6,9 +6,10 @@ import HomeView from './views/HomeView.vue'
 import LibraryView from './views/LibraryView.vue'
 import LoginView from './views/LoginView.vue'
 import AdminView from './views/AdminView.vue'
+import AccountView from './views/AccountView.vue'
 import AppearanceControls from './components/AppearanceControls.vue'
 import UiIcon from './components/UiIcon.vue'
-const routes = { today: HomeView, library: LibraryView, login: LoginView, admin: AdminView }
+const routes = { today: HomeView, library: LibraryView, login: LoginView, admin: AdminView, account: AccountView }
 const management = [
   { id: 'connection', label: '连接设置' }, { id: 'sources', label: '数据来源' }, { id: 'webhook', label: '回调通知' },
   { id: 'telegram', label: '电报助手' }, { id: 'schedules', label: '自动推送' },
@@ -17,7 +18,7 @@ const management = [
 const route = ref('today'), adminSection = ref('connection'), navOpen = ref(false), bootError = ref('')
 const component = computed(() => routes[route.value] || HomeView)
 const routeProps = computed(() => route.value === 'admin' ? { section: adminSection.value } : {})
-const heading = computed(() => route.value === 'admin' ? management.find(x => x.id === adminSection.value)?.label : route.value === 'library' ? '影片库' : '今日想看')
+const heading = computed(() => route.value === 'account' ? '账号安全' : route.value === 'admin' ? management.find(x => x.id === adminSection.value)?.label : route.value === 'library' ? '影片库' : '今日想看')
 let focusBeforeDrawer, previousOverflow = ''
 watch(navOpen, async open => {
   if (open) {
@@ -78,8 +79,9 @@ onUnmounted(() => { window.removeEventListener('hashchange', syncRoute); window.
           <span class="movie-nav-label">{{ t('管理设置') }}</span>
           <a v-for="item in management" :key="item.id" :href="`#/admin/${item.id}`" :class="{ active: route === 'admin' && adminSection === item.id }" :aria-current="route === 'admin' && adminSection === item.id ? 'page' : undefined"><UiIcon :name="item.id" />{{ t(item.label) }}</a>
           <button type="button" data-about-open @click="navOpen = false"><UiIcon name="account" />{{ t('关于项目') }}</button>
+          <a href="#/account" :class="{ active: route === 'account' }"><UiIcon name="account" />{{ t('账号安全') }}</a>
         </nav>
-        <div class="movie-sidebar-foot"><div class="movie-account"><strong>{{ store.user.username }}</strong><button type="button" class="movie-signout" @click="signOut">{{ t('退出登录') }}</button></div><small>© 2026 Stylle · MIT License</small></div>
+        <div class="movie-sidebar-foot"><div class="movie-account"><strong>{{ store.user.username }}</strong><button type="button" class="movie-signout account-signout" :title="t('退出登录')" :aria-label="t('退出登录')" :disabled="signingOut" @click="signOut"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H4v16h5 M14 8l4 4-4 4 M8 12h12"/></svg></button></div><small>© 2026 Stylle · MIT License</small></div>
       </aside>
       <header class="topbar movie-workspace-header">
         <button class="icon-btn movie-nav-toggle" @click="navOpen = !navOpen" :aria-expanded="navOpen" aria-controls="movie-navigation" :aria-label="t('主导航')"><UiIcon name="all" /></button>

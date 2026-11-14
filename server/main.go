@@ -32,6 +32,7 @@ type syncState struct {
 }
 
 type App struct {
+	credentialMu  sync.Mutex
 	loginGate     loginGate
 	posterMu      sync.Mutex
 	posterPending map[string]chan struct{}
@@ -197,7 +198,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const version = "0.10.2"
+const version = "0.11.0"
 
 func main() {
 	for runMain() {
