@@ -31,12 +31,14 @@ function reset() {
 
 <template>
   <section class="filter-panel" :class="{ compact }">
-    <div class="filter-head"><div><h3>{{ t('选片偏好') }}</h3></div><button class="text-btn" @click="reset">{{ t('重置') }}</button></div>
+    <div class="filter-head"><div><h3>{{ t('选片偏好') }}</h3></div><button type="button" class="text-btn" @click="reset">{{ t('重置') }}</button></div>
     <div class="library-chips" v-if="options.libraries?.length">
-      <button v-for="library in options.libraries" :key="library.id" :class="{ on: modelValue.libraries?.includes(library.id) }" @click="toggleLibrary(library.id)">
-        {{ library.name }} <small>{{ library.count }}</small>
+      <button type="button" :class="{ on: !modelValue.libraries?.length }" :aria-pressed="!modelValue.libraries?.length" @click="patch('libraries', [])">{{ t('全部媒体库') }}</button>
+      <button type="button" v-for="library in options.libraries" :key="library.id" :class="{ on: modelValue.libraries?.includes(library.id) }" :aria-pressed="!!modelValue.libraries?.includes(library.id)" @click="toggleLibrary(library.id)">
+        <span v-if="modelValue.libraries?.includes(library.id)" aria-hidden="true">✓</span> {{ library.name }} <small>{{ library.count }}</small>
       </button>
     </div>
+    <p class="library-selection-hint" v-if="options.libraries?.length">{{ t('媒体库可多选；选择全部时不限制媒体库。') }}</p>
     <div class="filter-grid">
       <label><span>{{ t('类型') }}</span><select :value="modelValue.genre" @change="patch('genre', $event.target.value)"><option value="">{{ t('全部类型') }}</option><option v-for="value in options.genres" :key="value">{{ value }}</option></select></label>
       <label><span>{{ t('地区') }}</span><select :value="modelValue.country" @change="patch('country', $event.target.value)"><option value="">{{ t('全部地区') }}</option><option v-for="value in options.countries" :key="value">{{ value }}</option></select></label>

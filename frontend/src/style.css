@@ -381,3 +381,10 @@ td small { color: var(--faint); }
 @media(max-width:1000px){.movie-workspace{padding-left:0}.movie-sidebar{transform:translateX(-100%);transition:transform .18s}.nav-open .movie-sidebar{transform:translateX(0)}.movie-nav-toggle,.movie-nav-close{display:inline-grid}.movie-nav-close{position:absolute;right:14px;top:14px}.movie-sidebar>.brand{margin-top:42px}.movie-nav-backdrop{position:fixed;inset:0;z-index:55;border:0;background:#0006}.movie-workspace .movie-workspace-header{padding:0 20px}.movie-workspace .page-wrap{width:calc(100% - 40px)}}
 @media(max-width:760px){.home-view .picker-layout>.filter-panel{align-self:auto}.movie-workspace .movie-workspace-header{height:64px}.movie-workspace .page-wrap{width:calc(100% - 28px);padding-top:24px}.movie-workspace .filter-panel.compact .filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.movie-workspace .movie-stage{display:block}.movie-workspace .poster-wrap{width:100%;min-height:0;max-height:none;aspect-ratio:2/3}.movie-workspace .movie-copy{padding:24px 20px}.movie-workspace .filter-panel.compact .filter-grid{grid-template-columns:1fr}.movie-workspace .intro-row{align-items:center;gap:12px}.movie-workspace .catalog-stat{min-width:90px;padding:10px}.movie-workspace .intro-row h1{font-size:32px}}
+
+/* Match theme specificity so selection remains visible in both themes. */
+:root[data-app-id=movie] .library-chips button { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; font-size: 12px; }
+:root[data-app-id=movie] .library-chips button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); font-weight: 650; }
+:root[data-app-id=movie] .library-chips button.on small { color: inherit; }
+.library-selection-hint { margin: -8px 0 16px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.default-filter-settings > .filter-panel { border: 0; box-shadow: none; padding: 12px 0; }

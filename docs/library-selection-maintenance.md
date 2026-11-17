@@ -1,0 +1,7 @@
+# Media library selection maintenance · 2026-11-17
+
+The shared theme's generic button selector overrode selected library chips, so model changes were invisible across the homepage and schedule editor. Explicit theme-scoped selected styles, pressed semantics, checkmarks and an all-libraries control fix this. The saved default range API had no remaining UI; connection settings now exposes its editor. New schedules inherit defaults; saved schedules and Telegram custom ranges remain independent. Options refresh after synchronization.
+
+Full synchronization already removed absent upstream records, but timestamp-only batch detection retained deleted records when batches completed in the same second. The transaction now invalidates previous batch markers before upserts and deletion; any failure rolls back. Empty/failed upstream responses preserve the index. Cache clearing remains image-only; misleading FnOS redownload text was replaced.
+
+Validated: Go tests and vet, production frontend build, isolated Edge browser at 375/834/1440 in light/dark themes, visible multi-selection, homepage payload, persisted defaults, schedule creation/edit/reload. Backend regression tests cover deleted-record removal, empty/failed response preservation and cache/index separation. No real synchronization, cache deletion or notification was triggered during tests. No remote publication requested for this maintenance.

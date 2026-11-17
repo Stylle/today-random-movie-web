@@ -131,7 +131,8 @@ function startPoll() {
         clearInterval(poll)
         const latest = await api('/api/admin/settings')
         applySyncMetadata(settings.value, latest)
-        await Promise.all([loadConfig(), refreshHistory()])
+        const [opts] = await Promise.all([api('/api/movies/options'), loadConfig(), refreshHistory()])
+        options.value = opts
         if (sync.value.error) flash(sync.value.error, true)
         else flash(`同步完成，共处理 ${sync.value.total || 0} 部影片`)
       }
@@ -200,7 +201,7 @@ const channelLabel = channel => ({ webhook: 'Webhook', telegram: 'Telegram 机�
 
 async function refreshHistory() { history.value = await api('/api/admin/history') }
 async function purgePosters() {
-  if (!confirm('清空封面缓存？下次访问时会从飞牛重新拉取。')) return
+  if (!confirm(t('仅删除已有的本地封面缓存，不删除影片索引，也不会从飞牛下载图片。确认清理？'))) return
   await run('purge', async () => {
     const result = await api('/api/admin/posters/purge', { method: 'POST' })
     flash(`已清理 ${result.removed} 个缓存文件`)
@@ -243,11 +244,18 @@ onUnmounted(() => { clearInterval(poll); clearInterval(telegramPoll) })
           <p class="muted">{{ t('测试使用当前表单，不会保存或启用配置；密钥留空沿用已保存的密钥。') }}</p><div class="action-row form-actions-sticky"><button class="primary" :disabled="!!busy" @click="saveFn">{{ busy === 'fn' ? t('保存中…') : t('保存连接') }}</button><button class="ghost" :disabled="!!busy" @click="testFn">{{ busy === 'test' ? t('测试中…') : t('测试连接') }}</button></div>
         </div>
         <div class="panel sync-panel">
-          <div><h3>{{ t('媒体库索引') }}</h3><p>{{ t('同步影片信息；缺失的外部封面地址会在访问影片时自动查询，无需重新同步影片列表。') }}</p><small v-if="settings.lastSyncAt">{{ t('上次尝试：') }}{{ new Date(settings.lastSyncAt).toLocaleString() }}</small></div>
+          <div><h3>{{ t('媒体库索引') }}</h3><p>{{ t('完整同步会新增、更新影片，并移除飞牛中已删除的影片。飞牛返回空列表时保留原索引，避免异常误删。') }}</p><small v-if="settings.lastSyncAt">{{ t('上次尝试：') }}{{ new Date(settings.lastSyncAt).toLocaleString() }}</small></div>
           <div class="sync-action"><button class="primary" :disabled="sync.running" @click="startSync">{{ sync.running ? t('同步进行中…') : t('立即同步') }}</button><button class="ghost" @click="purgePosters">{{ t('清理封面缓存') }}</button></div>
+          <p class="muted">{{ t('清理封面缓存仅删除本地缓存图片，不会清空影片索引。') }}</p>
           <div class="progress" v-if="sync.running"><div :style="{ width: sync.total ? `${sync.done / sync.total * 100}%` : '8%' }"></div></div>
           <p class="sync-state" v-if="sync.stage">{{ sync.stage }}<template v-if="sync.total"> · {{ sync.done }} / {{ sync.total }}</template></p>
           <p class="inline-error" v-if="currentSyncError(sync, settings)">{{ currentSyncError(sync, settings) }}</p>
+        </div>
+        <div class="panel default-filter-settings">
+          <h3>{{ t('默认选片范围') }}</h3>
+          <p class="muted">{{ t('供网站首页、Telegram 默认模式和新建推送规则使用；不会修改已有规则或机器人自定义范围。') }}</p>
+          <FilterPanel v-model="defaultFilters" :options="options" compact />
+          <div class="action-row"><button class="primary" :disabled="!!busy" @click="saveDefaultFilters">{{ t('保存默认范围') }}</button></div>
         </div>
         <div class="panel">
           <div class="panel-title-row"><div><h3>{{ t('定时同步') }}</h3><small>{{ t('自动执行完整同步，更新新增影片、简介和已观看状态。') }}</small></div><span class="status-dot" :class="{ on: syncSchedule.enabled }">{{ syncSchedule.enabled ? t('已启用') : t('未启用') }}</span></div>

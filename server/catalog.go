@@ -152,6 +152,13 @@ func (a *App) runSync() {
 		return
 	}
 	marker := nowISO()
+	// Invalidate the previous batch inside this transaction. Two complete syncs
+	// can finish within the same second, so a timestamp alone is not a batch ID.
+	if _, err = tx.Exec("UPDATE movies SET updated_at=''"); err != nil {
+		tx.Rollback()
+		finish(err)
+		return
+	}
 	for _, movie := range movies {
 		_, err = tx.Exec(`INSERT INTO movies(id,source_id,title,year,genres,countries,overview,cover_path,library_id,library,watched,duration,rating,updated_at,poster_sources,tmdb_id,douban_id)
 			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
