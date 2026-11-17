@@ -201,7 +201,7 @@ func (a *App) api(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const version = "0.12.2"
+const version = "0.12.3"
 
 func main() {
 	for runMain() {

@@ -1,6 +1,6 @@
 # Automatic notification delivery maintenance
 
-2026-11-17 local update. No remote publication.
+Included in v0.12.3.
 
 Previously the scheduler claimed a period before sending and skipped it forever after a transient network/channel/selection failure. Durable per-period delivery rows now retain the selected movie, successful channels, attempt count, next retry and error. At most four attempts use 1/5/15-minute backoff. A restart or calendar boundary does not abandon pending retries; disabled rules pause them and attempts overdue by 24 hours expire. Already confirmed channels are skipped. Response loss or a crash after external acceptance can still produce duplicates; no exactly-once guarantee. Old-version claimed periods are not replayed on upgrade. Manual runs remain independent new selections.
 
