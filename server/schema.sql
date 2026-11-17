@@ -99,3 +99,16 @@ CREATE TABLE IF NOT EXISTS telegram_movie_updates (
     payload TEXT NOT NULL, movie_id TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL,
     PRIMARY KEY(bot,update_id)
 );
+
+CREATE TABLE IF NOT EXISTS schedule_deliveries (
+    schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+    period_key TEXT NOT NULL,
+    movie_id TEXT NOT NULL DEFAULT '',
+    completed_channels TEXT NOT NULL DEFAULT '[]',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    state TEXT NOT NULL DEFAULT 'pending',
+    next_retry_at INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(schedule_id, period_key)
+);

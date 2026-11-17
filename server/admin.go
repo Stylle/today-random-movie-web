@@ -141,7 +141,14 @@ func (a *App) adminRoute(w http.ResponseWriter, r *http.Request) {
 	case p == "/api/admin/schedules" && r.Method == http.MethodGet:
 		items := []M{}
 		for _, row := range a.rows("SELECT * FROM schedules ORDER BY created_at") {
-			items = append(items, scanSchedule(row))
+			item := scanSchedule(row)
+			if run := a.one("SELECT state,attempts,next_retry_at,last_error FROM schedule_deliveries WHERE schedule_id=? ORDER BY updated_at DESC LIMIT 1", row["id"]); run != nil {
+				item["deliveryState"], item["deliveryAttempts"], item["deliveryError"] = run["state"], run["attempts"], run["last_error"]
+				if retry := int64(num(run["next_retry_at"])); retry > 0 && run["state"] == "pending" {
+					item["retryAt"] = time.Unix(retry, 0).UTC().Format(time.RFC3339)
+				}
+			}
+			items = append(items, item)
 		}
 		respond(w, M{"items": items})
 	case p == "/api/admin/schedules" && r.Method == http.MethodPost:

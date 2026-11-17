@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	probe "github.com/Stylle/today-random-movie-web/server/internal/integrationtest"
-	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -222,21 +221,29 @@ func (a *App) schedulerLoop() {
 }
 
 func (a *App) checkSchedules() {
+	if !a.scheduleMu.TryLock() {
+		return
+	}
+	defer a.scheduleMu.Unlock()
+	if a.restoring.Load() {
+		return
+	}
 	a.checkSyncSchedule(time.Now())
 	for _, row := range a.rows("SELECT * FROM schedules WHERE enabled=1 ORDER BY created_at") {
+		// Retry a pending period even across midnight / a weekly boundary. Old
+		// attempts expire after a day rather than flooding a restarted instance.
+		for _, pending := range a.rows("SELECT period_key,next_retry_at FROM schedule_deliveries WHERE schedule_id=? AND state='pending'", row["id"]) {
+			if next := int64(num(pending["next_retry_at"])); next > 0 && next < time.Now().Add(-24*time.Hour).Unix() {
+				a.exec("UPDATE schedule_deliveries SET state='failed',last_error=?,next_retry_at=0,updated_at=? WHERE schedule_id=? AND period_key=?", "服务离线超过重试窗口，本周期已停止", nowISO(), row["id"], pending["period_key"])
+				continue
+			}
+			a.runAutomaticSchedule(row, str(pending["period_key"]), time.Now())
+		}
 		due, key := scheduleDue(row, time.Now())
-		if !due || key == str(row["last_run_key"]) {
+		if !due {
 			continue
 		}
-		// Claim the period before sending. The rule promises at most one automatic
-		// attempt per period; delivery outcome remains visible in webhook_logs.
-		claim := a.exec("UPDATE schedules SET last_run_key=?,last_run_at=?,updated_at=? WHERE id=? AND last_run_key<>?", key, nowISO(), nowISO(), row["id"], key)
-		if claimed, err := claim.RowsAffected(); err != nil || claimed != 1 {
-			continue
-		}
-		if _, err := a.executeSchedule(row, true); err != nil {
-			log.Printf("schedule %s: %v", row["id"], err)
-		}
+		a.runAutomaticSchedule(row, key, time.Now())
 	}
 }
 

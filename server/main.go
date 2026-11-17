@@ -50,6 +50,7 @@ type App struct {
 	writeMu       sync.Mutex
 	fnMu          sync.Mutex
 	fnClient      *FnOSClient
+	scheduleMu    sync.Mutex
 	syncMu        sync.Mutex
 	syncState     syncState
 	stop          chan struct{}
